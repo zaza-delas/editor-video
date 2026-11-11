@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITULO__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=Montserrat:wght@600;700;900&family=Poppins:wght@600;700;900&family=Oswald:wght@600;700&family=Anton&family=Bebas+Neue&family=Bangers&family=Luckiest+Guy&family=Archivo+Black&family=Lilita+One&family=Permanent+Marker&family=Noto+Color+Emoji&display=swap">
+<style>
+:root {
+  color-scheme: dark;
+  /* cor: referência do Zaza = CapCut: grafite quase preto, painéis em camadas, ciano na seleção e na ação */
+  --fundo: #0f0f12;
+  --painel: #1a1a1f;
+  --painel2: #24242b;
+  --linha: #2e2e36;
+  --texto: #e8e8ee;
+  --fraco: #8a8a96;
+  --destaque: #22d3ee;
+  /* cores das faixas como no CapCut: texto laranja, áudio verde, adesivo roxo */
+  --c-texto: #8c5a1e; --c-texto-t: #ffd59a;
+  --c-audio: #17594a; --c-audio-t: #8be8cc;
+  --c-balao: #4f3f86;
+  /* fonte: Barlow Semi Condensed cabe muito rótulo de timeline em pouco espaço;
+     Montserrat só dentro do quadro, que é a fonte do vídeo final */
+  --ui: "Barlow Semi Condensed", system-ui, sans-serif;
+  /* layout: CapCut. Largo: sons | player | propriedades em cima, timeline na largura toda embaixo.
+     Médio: player | propriedades. Celular: player, timeline, propriedades, sons. */
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--fundo); color: var(--texto); font-family: var(--ui); font-size: 15px; }
+body { padding: 8px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: var(--painel2); border: 1px solid var(--linha); border-radius: 6px; padding: 6px 12px; min-height: 36px; cursor: pointer; }
+button:hover { border-color: var(--fraco); }
+button:disabled { opacity: .35; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--destaque); outline-offset: 1px; }
+button.principal { background: var(--destaque); color: #06272d; border-color: var(--destaque); font-weight: 600; }
+button.icone { width: 36px; padding: 0; display: inline-grid; place-items: center; background: transparent; border-color: transparent; }
+button.icone:hover:not(:disabled) { background: var(--painel2); }
+button.icone svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+input, select, textarea { background: var(--fundo); border: 1px solid var(--linha); border-radius: 6px; padding: 6px 8px; min-height: 34px; width: 100%; }
+textarea { resize: vertical; min-height: 52px; }
+input[type=range] { accent-color: var(--destaque); padding: 0; border: 0; background: transparent; min-height: 28px; }
+label { display: grid; gap: 4px; color: var(--fraco); font-size: 13px; min-width: 0; }
+
+.app {
+  display: grid; gap: 8px;
+  grid-template-columns: 240px minmax(0, 1fr) 320px;
+  grid-template-areas: "topo topo topo" "sons player props" "tl tl tl";
+}
+@media (max-width: 1100px) {
+  .app { grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr); grid-template-areas: "topo topo" "player props" "player sons" "tl tl"; }
+}
+@media (max-width: 640px) {
+  .app .tela { max-width: max(180px, calc(48vh * 9 / 16)); }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "topo" "player" "tl" "props" "sons"; }
+}
+.caixa { background: var(--painel); border-radius: 8px; min-width: 0; }
+
+.topo { grid-area: topo; display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+.topo h1 { font-size: 17px; font-weight: 600; margin: 0; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.sons { grid-area: sons; padding: 12px; display: grid; gap: 12px; align-content: start; }
+.abas { display: flex; gap: 4px; }
+.abas button { flex: 1; background: transparent; border-color: transparent; color: var(--fraco); }
+.abas button.on { background: var(--painel2); color: var(--texto); }
+.lista { display: grid; gap: 4px; }
+.item-som { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 8px; background: var(--painel2); border-radius: 6px; padding: 4px 8px 4px 4px; }
+.item-som span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-som small { color: var(--fraco); font-variant-numeric: tabular-nums; }
+.item-som .add { min-height: 30px; padding: 2px 10px; }
+
+.player { grid-area: player; padding: 8px; display: grid; gap: 8px; justify-items: center; align-content: start; }
+.tela { position: relative; width: 100%; max-width: max(200px, calc(56vh * 9 / 16)); aspect-ratio: 9 / 16; background: #000; overflow: hidden; }
+.tela canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tela .camada { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; transform-origin: 0 0; pointer-events: none; }
+.transporte { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; width: 100%; max-width: 520px; }
+.tc { font-variant-numeric: tabular-nums; color: var(--fraco); font-size: 14px; }
+.tc b { color: var(--destaque); font-weight: 500; }
+
+.props { grid-area: props; padding: 12px; display: grid; gap: 12px; align-content: start; }
+.props h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.vazio { color: var(--fraco); margin: 0; }
+.barra { display: grid; grid-template-columns: 74px minmax(0, 1fr) 52px; align-items: center; gap: 8px; font-size: 14px; }
+.barra span { color: var(--fraco); }
+.barra output { text-align: right; font-variant-numeric: tabular-nums; }
+.grade2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.linha-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.alternar { display: flex; align-items: center; gap: 8px; color: var(--texto); font-size: 14px; }
+.alternar input { width: auto; min-height: 0; accent-color: var(--destaque); }
+
+.tl { grid-area: tl; padding: 4px 0 8px; user-select: none; -webkit-user-select: none; }
+.ferramentas { display: flex; align-items: center; gap: 2px; padding: 0 8px 4px; border-bottom: 1px solid var(--linha); }
+.ferramentas .sep { width: 1px; height: 20px; background: var(--linha); margin: 0 6px; }
+.ferramentas .zoom { margin-left: auto; display: flex; align-items: center; gap: 4px; color: var(--fraco); }
+.ferramentas .zoom input { width: 120px; }
+.tl-corpo { display: grid; grid-template-columns: 64px minmax(0, 1fr); }
+.cabecas { border-right: 1px solid var(--linha); }
+.cabecas div { display: flex; align-items: center; padding-left: 8px; font-size: 12px; color: var(--fraco); border-bottom: 1px solid transparent; }
+.rolagem { overflow-x: auto; overflow-y: hidden; position: relative; touch-action: pan-x; }
+.trilho { position: relative; }
+.regua { position: relative; height: 26px; cursor: ew-resize; color: var(--fraco); font-size: 11px; font-variant-numeric: tabular-nums; touch-action: none; }
+.regua span { position: absolute; top: 2px; transform: translateX(3px); }
+.regua i { position: absolute; bottom: 0; width: 1px; height: 5px; background: var(--linha); }
+.regua i.g { height: 10px; background: var(--fraco); }
+.pista { position: relative; margin-bottom: 4px; }
+.h-video { height: 66px; } .h-leg { height: 30px; } .h-sfx { height: 34px; } .h-balao { height: 26px; } .h-sobre { height: 40px; }
+.pista.alvo { outline: 1px dashed #ffffff55; outline-offset: -1px; border-radius: 5px; }
+.pista.vazia { background: repeating-linear-gradient(90deg, #ffffff08 0 12px, transparent 12px 24px); border-radius: 5px; }
+.b-sobre { background: #3a6fd8; }
+.bloco { position: absolute; top: 0; bottom: 0; border-radius: 5px; overflow: hidden; cursor: grab; touch-action: none; font-size: 12px; border: 2px solid transparent; }
+.bloco.sel { border-color: #fff; z-index: 2; }
+.bloco .rot { position: absolute; left: 4px; top: 2px; right: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.b-video { background: #203a44; }
+.b-video .minis { position: absolute; left: 0; right: 0; top: 0; height: 44px; display: flex; overflow: hidden; pointer-events: none; }
+.b-video .minis div { flex: 0 0 auto; height: 44px; background-repeat: no-repeat; }
+.b-video .rot { background: rgba(0, 0, 0, .55); left: 2px; right: auto; max-width: calc(100% - 4px); padding: 0 4px; border-radius: 3px; }
+.b-video svg.onda { position: absolute; left: 0; bottom: 0; height: 18px; width: 100%; pointer-events: none; }
+.b-video svg.onda path { stroke: #7fc6d6; stroke-width: 1; }
+.b-leg { background: var(--c-texto); color: var(--c-texto-t); }
+.b-leg .rot { top: 5px; }
+.b-sfx { background: var(--c-audio); color: var(--c-audio-t); }
+.b-sfx svg.onda { position: absolute; inset: 14px 0 0 0; width: 100%; height: 18px; pointer-events: none; }
+.b-sfx svg.onda path { stroke: var(--c-audio-t); stroke-width: 1; opacity: .7; }
+.b-balao { background: var(--c-balao); }
+.b-balao .rot { top: 3px; }
+.mudo { opacity: .55; }
+.bloco.off { opacity: .35; background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(0,0,0,.35) 6px 9px); }
+button.icone.on { color: var(--destaque); background: var(--painel2); }
+.alca { position: absolute; top: 0; bottom: 0; width: 12px; cursor: ew-resize; z-index: 3; }
+.alca.e { left: -2px; } .alca.d { right: -2px; }
+.bloco.sel .alca::after { content: ""; position: absolute; top: 25%; bottom: 25%; left: 4px; width: 3px; border-radius: 2px; background: #fff; }
+.cabeca { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; z-index: 5; pointer-events: none; }
+.cabeca::before { content: ""; position: absolute; top: 0; left: -5px; border: 6px solid transparent; border-top: 8px solid #fff; }
+.guia { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--destaque); z-index: 4; pointer-events: none; display: none; }
+.aviso { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--texto); color: var(--fundo); padding: 10px 16px; border-radius: 8px; font-weight: 500; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+.aviso.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .aviso { transition: none; } }
+
+/* ===== quadro do vídeo: mesmo CSS do render ===== */
+/*__CSS_QUADRO__*/
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-desfazer" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-refazer" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+  <symbol id="i-split" viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M8 7H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h3"/><path d="M16 7h3a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-3"/></symbol>
+  <symbol id="i-lixo" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></symbol>
+  <symbol id="i-pausa" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="3"/></symbol>
+  <symbol id="i-menos" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-4-4"/></symbol>
+  <symbol id="i-mais" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-4-4"/></symbol>
+  <symbol id="i-olho" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></symbol>
+  <symbol id="i-varios" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="m5.5 7 1.5 1.5 2.5-3M15.5 17l1.5 1.5 2.5-3"/></symbol>
+  <symbol id="i-ouvir" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></symbol>
+</svg>
+
+<div class="app">
+  <div class="topo">
+    <h1 id="titulo">Editor</h1>
+    <button id="bt-baixar" class="principal">Baixar projeto</button>
+  </div>
+
+  <div class="caixa sons" id="sons"></div>
+
+  <div class="caixa player">
+    <div class="tela" id="tela">
+      <canvas id="cv" width="540" height="960"></canvas>
+      <div class="camada"><div class="quadro" id="quadro"></div></div>
+    </div>
+    <div class="transporte">
+      <span class="tc" id="tc"></span>
+      <button id="bt-play" class="icone" title="Tocar (espaço)" style="width:44px;height:44px"><svg><use href="#i-play"/></svg></button>
+      <span></span>
+    </div>
+  </div>
+
+  <div class="caixa props" id="props"></div>
+
+  <div class="caixa tl">
+    <div class="ferramentas">
+      <button class="icone" id="bt-desfazer" title="Desfazer (Ctrl+Z)"><svg><use href="#i-desfazer"/></svg></button>
+      <button class="icone" id="bt-refazer" title="Refazer (Ctrl+Shift+Z ou Ctrl+Y)"><svg><use href="#i-refazer"/></svg></button>
+      <span class="sep"></span>
+      <button class="icone" id="bt-split" title="Dividir na agulha (Ctrl+B)"><svg><use href="#i-split"/></svg></button>
+      <button class="icone" id="bt-apagar" title="Apagar selecionado (Delete)"><svg><use href="#i-lixo"/></svg></button>
+      <button class="icone" id="bt-olho" title="Desativar / ativar (H)"><svg><use href="#i-olho"/></svg></button>
+      <span class="sep"></span>
+      <button class="icone" id="bt-varios" title="Selecionar vários (ou Ctrl/Shift + clique)"><svg><use href="#i-varios"/></svg></button>
+      <div class="zoom">
+        <button class="icone" id="bt-zmenos" title="Afastar"><svg><use href="#i-menos"/></svg></button>
+        <input type="range" id="zoom" min="20" max="300" value="90" aria-label="Zoom da linha do tempo">
+        <button class="icone" id="bt-zmais" title="Aproximar"><svg><use href="#i-mais"/></svg></button>
+      </div>
+    </div>
+    <div class="tl-corpo">
+      <div class="cabecas" id="cabecas"></div>
+      <div class="rolagem" id="rolagem"><div class="trilho" id="trilho"></div></div>
+    </div>
+  </div>
+</div>
+<div class="aviso" id="aviso"></div>
+
+<script>
+const DADOS = /*__DADOS__*/null;
+const FPS = (DADOS.projeto.formato && DADOS.projeto.formato.fps) || 30;
+let P = JSON.parse(JSON.stringify(DADOS.projeto));
+P.legendas = P.legendas || []; P.sfx = P.sfx || []; P.estilo = P.estilo || {}; P.sobre = P.sobre || [];
+const M = DADOS.midias;
+let T = 0, tocando = false, relogio0 = 0, T0 = 0, Tant = 0;
+let sel = null;          // {tipo: 'trecho'|'legenda'|'sfx'|'balao', i}  (o principal)
+let multi = [];          // índices do mesmo tipo quando tem mais de um selecionado
+let modoVarios = false;  // botão "selecionar vários" (pro celular)
+const LISTA = { trecho: () => P.trechos, legenda: () => P.legendas, sfx: () => P.sfx, sobre: () => P.sobre };
+function selecionados() { if (!sel) return []; if (multi.length > 1) return multi.map((i) => ({ tipo: sel.tipo, i })); return [sel]; }
+function itemDe(s) { return s.tipo === 'balao' ? P.balao : LISTA[s.tipo]()[s.i]; }
+let pxs = 90;
+let abaSons = 'sons';
+
+const $ = (id) => document.getElementById(id);
+const q = (s) => Math.round(s * FPS) / FPS;
+const r3 = (s) => Math.round(s * 1000) / 1000;
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const pad = (n) => String(n).padStart(2, '0');
+function tc(s) { const f = Math.round(s * FPS); const seg = Math.floor(f / FPS); return `${pad(Math.floor(seg / 60))}:${pad(seg % 60)}:${pad(f % FPS)}`; }
+function curto(s) { return (Math.round(s * 10) / 10).toFixed(1).replace('.', ',') + 's'; }
+function aviso(txt) { const a = $('aviso'); a.textContent = txt; a.classList.add('on'); clearTimeout(aviso.t); aviso.t = setTimeout(() => a.classList.remove('on'), 1600); }
+
+// ---------- desfazer / refazer ----------
+const pilhaD = [], pilhaR = [];
+let pendente = null; // estado antes de uma mudança contínua (barra, texto)
+function confirmar(antes) {
+  if (antes == null || antes === JSON.stringify(P)) return;
+  pilhaD.push(antes); if (pilhaD.length > 200) pilhaD.shift(); pilhaR.length = 0; botoesHist();
+}
+function mudar(fn) { const antes = JSON.stringify(P); fn(); confirmar(antes); }
+function abrirPendente() { if (pendente == null) pendente = JSON.stringify(P); }
+function fecharPendente() { confirmar(pendente); pendente = null; }
+function desfazer() { fecharPendente(); if (!pilhaD.length) return aviso('Nada pra desfazer'); pilhaR.push(JSON.stringify(P)); P = JSON.parse(pilhaD.pop()); validarSel(); tudo(); }
+function refazer() { fecharPendente(); if (!pilhaR.length) return aviso('Nada pra refazer'); pilhaD.push(JSON.stringify(P)); P = JSON.parse(pilhaR.pop()); validarSel(); tudo(); }
+function botoesHist() { $('bt-desfazer').disabled = !pilhaD.length; $('bt-refazer').disabled = !pilhaR.length; }
+function validarSel() {
+  multi = [];
+  if (!sel) return;
+  const lista = { trecho: P.trechos, legenda: P.legendas, sfx: P.sfx, sobre: P.sobre }[sel.tipo];
+  if (sel.tipo === 'balao' ? !P.balao : !lista[sel.i]) sel = null;
+}
+
+// ---------- linha do tempo ----------
+function durTrecho(t) { return (M[t.midia] || {}).tipo === 'imagem' ? (t.duracao || 1) : (t.ate - t.de); }
+function estrutura(trechos) { let ini = 0; return trechos.map((t) => { const d = durTrecho(t), o = { t, ini, dur: d, de: t.de || 0 }; ini += d; return o; }); }
+function linha() { const tr = estrutura(P.trechos); const total = tr.length ? tr[tr.length - 1].ini + tr[tr.length - 1].dur : 0; return { tr, total }; }
+function trechoEm(tempo, tr, fim) {
+  for (let k = 0; k < tr.length; k++) { const x = tr[k]; if (fim ? tempo <= x.ini + x.dur + 1e-6 : tempo < x.ini + x.dur - 1e-6) return k; }
+  return tr.length - 1;
+}
+function durSfx(s) { const m = M[s.midia] || {}; return Math.max(0.05, Math.min(s.duracao || 99, Math.min(m.duracao || 1, 12) - (s.inicio || 0))); }
+function durSobre(o) { return (M[o.midia] || {}).tipo === 'imagem' ? (o.duracao || 2) : (o.ate - (o.de || 0)); }
+
+// ---------- camadas (pistas): legenda, SFX e clipe por cima podem ficar um sobre o outro ----------
+const COM_PISTA = ['legenda', 'sfx', 'sobre'];
+function iv(tipo, o) { return tipo === 'legenda' ? [o.de, o.ate] : tipo === 'sfx' ? [o.em, o.em + durSfx(o)] : [o.em, o.em + durSobre(o)]; }
+function nPistas(tipo) { const l = LISTA[tipo](); return l.length ? Math.max(...l.map((o) => o.pista || 0)) + 2 : 1; }
+function livre(tipo, o, k) { const [a, b] = iv(tipo, o); return !LISTA[tipo]().some((x) => x !== o && (x.pista || 0) === k && Math.min(b, iv(tipo, x)[1]) - Math.max(a, iv(tipo, x)[0]) > 0.001); }
+function acomodar(tipo, o) { let k = o.pista || 0; while (!livre(tipo, o, k)) k++; if (k) o.pista = k; else delete o.pista; }
+function compactar(tipo) { // tira camada vazia do meio (ex.: moveu o único item da camada 1 pra 3)
+  const usadas = [...new Set(LISTA[tipo]().map((o) => o.pista || 0))].sort((x, y) => x - y), novo = {};
+  usadas.forEach((k, j) => { novo[k] = j; });
+  LISTA[tipo]().forEach((o) => { const k = novo[o.pista || 0]; if (k) o.pista = k; else delete o.pista; });
+}
+function vizinhos(tipo, o, lista) { // começo e fim livres em volta de o, na mesma pista
+  const k = o.pista || 0, [a] = iv(tipo, o); let ant = 0, prox = Infinity;
+  for (const x of lista) { if (x === o || (x.pista || 0) !== k) continue; const [xa, xb] = iv(tipo, x); if (xb <= a + 1e-6) ant = Math.max(ant, xb); else if (xa >= a - 1e-6) prox = Math.min(prox, xa); }
+  return [ant, prox];
+}
+
+/* Quando um trecho muda (aparar, apagar), legendas e SFX andam junto com o conteúdo:
+   cada tempo vira "segundo X do original" e volta pro novo tempo final. */
+function remapear(velho, novo, mapaIdx) {
+  const tv = estrutura(velho), tn = estrutura(novo);
+  const totalN = tn.length ? tn[tn.length - 1].ini + tn[tn.length - 1].dur : 0;
+  const map = (t, fim) => {
+    const k = trechoEm(t, tv, fim), x = tv[k]; if (!x) return { t, fora: false };
+    const src = x.de + (t - x.ini), nk = mapaIdx(k);
+    if (nk < 0) { const prox = tn.find((y, j) => mapaIdx(k + 1) === j); return { t: prox ? prox.ini : (tn[k] ? tn[k].ini : totalN), fora: true }; }
+    const y = tn[nk]; const c = Math.min(Math.max(src, y.de), y.de + y.dur);
+    return { t: y.ini + (c - y.de), fora: false };
+  };
+  P.legendas = P.legendas.map((l) => { const a = map(l.de, false), b = map(l.ate, true); return { ...l, de: r3(a.t), ate: r3(b.t) }; })
+    .filter((l) => l.ate - l.de >= 0.05);
+  P.sfx = P.sfx.map((s) => { const a = map(s.em, false); return a.fora ? null : { ...s, em: r3(a.t) }; }).filter(Boolean);
+  P.sobre = P.sobre.map((o) => { const a = map(o.em, false); return a.fora ? null : { ...o, em: r3(a.t) }; }).filter(Boolean);
+  if (P.balao) { P.balao.ate = r3(Math.min(P.balao.ate ?? 3.5, totalN)); if (P.balao.ate - (P.balao.de || 0) < 0.1) P.balao.de = 0; }
+}
+
+// ---------- mídia e som ----------
+const els = {};
+for (const [nome, m] of Object.entries(M)) {
+  if (m.tipo === 'video') { const v = document.createElement('video'); v.src = m.src; v.preload = 'auto'; v.playsInline = true; v.muted = true; v.setAttribute('playsinline', ''); els[nome] = v; }
+  else if (m.tipo === 'imagem') { const im = new Image(); im.src = m.src; els[nome] = im; }
+}
+const elsS = {};
+for (const [nome, m] of Object.entries(M)) {
+  if (m.tipo === 'video') { const v = document.createElement('video'); v.src = m.src; v.preload = 'auto'; v.playsInline = true; v.muted = true; v.setAttribute('playsinline', ''); elsS[nome] = v; }
+  else if (m.tipo === 'imagem') elsS[nome] = els[nome];
+}
+/* Som da prévia: tudo passa pelo Web Audio (o vídeo fica mudo e só desenha a imagem).
+   Assim volume acima de 100%, mudo e posição dos SFX valem em qualquer aparelho, inclusive iPhone,
+   onde o navegador ignora o volume do elemento de vídeo. */
+let actx = null, somOk = false; const bufs = {}; let fontes = [];
+function b64buf(url) { const s = atob(url.split(',')[1]); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; }
+function decodificar(buf) { return new Promise((ok, erro) => { const r = actx.decodeAudioData(buf, ok, erro); if (r && r.then) r.then(ok, erro); }); }
+try {
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  for (const [n, m] of Object.entries(M)) if (m.tipo === 'audio' || m.tipo === 'video') decodificar(b64buf(m.src)).then((b) => { bufs[n] = b; somOk = true; }).catch(() => {});
+} catch (err) { actx = null; }
+function garantirAudio() {
+  if (!actx) return;
+  if (actx.state !== 'running') actx.resume();
+  if (!garantirAudio.ok) { const s = actx.createBufferSource(); s.buffer = actx.createBuffer(1, 1, 22050); s.connect(actx.destination); s.start(0); garantirAudio.ok = true; }
+}
+function agendarBuf(nome, quando, offset, dur, vol) {
+  const b = bufs[nome]; if (!b || dur <= 0.005 || vol <= 0) return;
+  const s = actx.createBufferSource(), g = actx.createGain(); s.buffer = b;
+  const f = Math.min(0.006, dur / 3);
+  g.gain.setValueAtTime(0, quando); g.gain.linearRampToValueAtTime(vol, quando + f);
+  g.gain.setValueAtTime(vol, quando + dur - f); g.gain.linearRampToValueAtTime(0, quando + dur);
+  s.connect(g).connect(actx.destination);
+  s.start(quando, Math.max(0, offset), dur); fontes.push(s);
+  s.onended = () => { fontes = fontes.filter((x) => x !== s); };
+}
+function tocarSom(nome, vol, offset = 0, dur = null) { // botão "Ouvir"
+  garantirAudio(); if (!actx || !bufs[nome]) return;
+  agendarBuf(nome, actx.currentTime + 0.02, offset, (dur || bufs[nome].duration) - offset, vol);
+}
+function pararSons() { fontes.forEach((s) => { try { s.stop(); } catch (e) {} }); fontes = []; }
+let ctx0 = 0, chaveSom = '';
+function agendarTudo() {
+  pararSons(); if (!actx) return;
+  ctx0 = actx.currentTime + 0.06; T0 = T;
+  const L = linha();
+  for (const x of L.tr) {
+    const t = x.t, m = M[t.midia] || {}; if (m.tipo !== 'video' || t.mudo) continue;
+    if (x.ini + x.dur <= T0) continue;
+    let ini = Math.max(x.ini, T0);
+    while (ini < x.ini + x.dur - 0.005) { // o trecho pode cruzar pedaços da cópia leve
+      const src = x.de + (ini - x.ini), seg = (m.mapa || []).find((s) => src >= s.a - 0.005 && src < s.b);
+      if (!seg) break;
+      const dur = Math.min(x.ini + x.dur - ini, seg.b - src);
+      agendarBuf(t.midia, ctx0 + (ini - T0), seg.o + (src - seg.a), dur, t.volume ?? 1);
+      ini += dur;
+    }
+  }
+  for (const s of P.sfx) {
+    if (s.desativado) continue;
+    const d = durSfx(s); if (s.em + d <= T0) continue;
+    const ini = Math.max(s.em, T0);
+    agendarBuf(s.midia, ctx0 + (ini - T0), (s.inicio || 0) + ini - s.em, s.em + d - ini, s.volume ?? 1);
+  }
+  for (const o of P.sobre) {
+    const m = M[o.midia] || {}; if (o.desativado || o.mudo || m.tipo !== 'video') continue;
+    const d = durSobre(o); if (o.em + d <= T0) continue;
+    let ini = Math.max(o.em, T0);
+    while (ini < o.em + d - 0.005) {
+      const src = (o.de || 0) + (ini - o.em), seg = (m.mapa || []).find((x) => src >= x.a - 0.005 && src < x.b); if (!seg) break;
+      const dd = Math.min(o.em + d - ini, seg.b - src);
+      agendarBuf(o.midia, ctx0 + (ini - T0), seg.o + (src - seg.a), dd, o.volume ?? 1); ini += dd;
+    }
+  }
+  chaveSom = JSON.stringify([P.trechos, P.sfx, P.sobre]);
+}
+function proxyT(nome, tf) {
+  for (const s of (M[nome].mapa || [])) if (tf >= s.a - 0.01 && tf <= s.b + 0.01) return s.o + Math.min(Math.max(tf, s.a), s.b) - s.a;
+  return null;
+}
+
+// ---------- desenho do quadro ----------
+const cv = $('cv'), cx = cv.getContext('2d');
+function desenharMidia(el, encaixe, zoom) {
+  const W = cv.width, H = cv.height, iw = el.videoWidth || el.naturalWidth, ih = el.videoHeight || el.naturalHeight;
+  if (!iw) return;
+  const z = zoom || 1, cobrir = Math.max(W / iw, H / ih) * z, conter = Math.min(W / iw, H / ih) * z;
+  const pinta = (s) => { const w = iw * s, h = ih * s; cx.drawImage(el, (W - w) / 2, (H - h) / 2, w, h); };
+  if (encaixe === 'borrado') { cx.save(); cx.filter = 'blur(20px) brightness(0.92)'; pinta(Math.max(W / iw, H / ih) * 1.05); cx.restore(); pinta(conter); }
+  else if (encaixe === 'conter') pinta(conter); else pinta(cobrir);
+}
+function foraDaCopia() {
+  cx.fillStyle = '#000'; cx.fillRect(0, 0, cv.width, cv.height); cx.fillStyle = '#8a8a96';
+  cx.font = '600 22px "Barlow Semi Condensed", sans-serif'; cx.textAlign = 'center';
+  cx.fillText('Fora da cópia leve da página', cv.width / 2, cv.height / 2 - 12);
+  cx.fillText('(o vídeo final tem esse pedaço)', cv.width / 2, cv.height / 2 + 18);
+}
+const VL = { y: '--leg-y', largura: '--leg-largura', tam_en: '--tam-en', tam_pt: '--tam-pt', cor_en: '--cor-en', cor_pt: '--cor-pt', contorno_en: '--contorno-en', contorno_pt: '--contorno-pt', espaco: '--leg-espaco', fonte_en: '--fonte-en', fonte_pt: '--fonte-pt' };
+const VB = { y: '--balao-y', largura: '--balao-largura', tam: '--balao-tam', fundo: '--balao-fundo', cor: '--balao-cor', fonte: '--balao-fonte' };
+const FONTES = ['Montserrat', 'Poppins', 'Oswald', 'Anton', 'Bebas Neue', 'Bangers', 'Luckiest Guy', 'Archivo Black', 'Lilita One', 'Permanent Marker'];
+function cssVars(est, mapa) { return Object.entries(est || {}).filter(([k]) => mapa[k]).map(([k, v]) => `${mapa[k]}:${k.startsWith('fonte') ? `'${String(v).replace(/['"]/g, '')}'` : typeof v === 'number' ? v + 'px' : v}`).join(';'); }
+let textoAtual = null;
+function desenharTextos(tempo) {
+  const tq = q(tempo) + 1e-4; let h = '';
+  for (const l of P.legendas) if (!l.desativado && q(l.de) <= tq && tq < q(l.ate)) {
+    const st = cssVars({ ...(P.estilo.legenda || {}), ...(l.estilo || {}) }, VL);
+    h += `<div class="legenda" style="${st}">${l.en ? `<div class="en">${esc(l.en)}</div>` : ''}${l.pt ? `<div class="pt">${esc(l.pt)}</div>` : ''}</div>`;
+  }
+  const b = P.balao;
+  if (b && b.texto && !b.desativado && q(b.de || 0) <= tq && tq < q(b.ate ?? 3.5)) {
+    h += `<div class="balao${b.quebra ? ' quebra' : ''}" style="${cssVars({ ...(P.estilo.balao || {}), ...(b.estilo || {}) }, VB)}">${esc(b.texto)}</div>`;
+  }
+  if (h !== textoAtual) { $('quadro').innerHTML = h; textoAtual = h; }
+}
+
+function quadro() {
+  const L = linha();
+  const comSom = actx && somOk;
+  if (tocando) {
+    T = comSom ? T0 + Math.max(0, actx.currentTime - ctx0) : T0 + (performance.now() - relogio0) / 1000;
+    if (T >= L.total) { T = L.total; parar(); }
+    else if (comSom && JSON.stringify([P.trechos, P.sfx, P.sobre]) !== chaveSom) { clearTimeout(quadro.re); quadro.re = setTimeout(() => { if (tocando) agendarTudo(); }, 60); chaveSom = JSON.stringify([P.trechos, P.sfx, P.sobre]); }
+  }
+  Tant = T;
+  const k = trechoEm(T, L.tr, false), x = L.tr[k];
+  cx.fillStyle = '#000'; cx.fillRect(0, 0, cv.width, cv.height);
+  if (x) {
+    const t = x.t, m = M[t.midia] || {}, el = els[t.midia];
+    for (const [n, e] of Object.entries(els)) if (e instanceof HTMLVideoElement && n !== t.midia && !e.paused) e.pause();
+    if (m.tipo === 'video') {
+      const pt = proxyT(t.midia, x.de + (T - x.ini));
+      if (pt == null) { el.pause(); foraDaCopia(); }
+      else {
+        if (comSom) el.muted = true; else { el.muted = !!t.mudo; el.volume = Math.min(1, t.volume ?? 1); }
+        if (Math.abs(el.currentTime - pt) > (tocando ? 0.15 : 0.02)) el.currentTime = pt;
+        if (tocando && el.paused) el.play().catch(() => {});
+        if (!tocando && !el.paused) el.pause();
+        desenharMidia(el, t.encaixe, t.zoom);
+      }
+    } else if (m.tipo === 'imagem') desenharMidia(el, t.encaixe, t.zoom);
+  }
+  desenharSobre(comSom);
+  desenharTextos(T);
+  $('tc').innerHTML = `<b>${tc(T)}</b> / ${tc(L.total)}`;
+  const cab = $('cabeca'); if (cab) cab.style.left = (T * pxs) + 'px';
+  if (tocando) { const r = $('rolagem'), px = T * pxs; if (px < r.scrollLeft || px > r.scrollLeft + r.clientWidth - 40) r.scrollLeft = px - 40; }
+  requestAnimationFrame(quadro);
+}
+function desenharSobre(comSom) {
+  const k = cv.width / 1080, ativos = new Set();
+  const lista = P.sobre.filter((o) => !o.desativado && o.em <= T && T < o.em + durSobre(o)).sort((a, b) => (a.pista || 0) - (b.pista || 0));
+  for (const o of lista) {
+    const m = M[o.midia] || {}, el = elsS[o.midia]; if (!el) continue;
+    if (m.tipo === 'video') {
+      const pt = proxyT(o.midia, (o.de || 0) + (T - o.em)); if (pt == null) continue;
+      ativos.add(el);
+      if (Math.abs(el.currentTime - pt) > (tocando ? 0.15 : 0.02)) el.currentTime = pt;
+      if (tocando && el.paused) el.play().catch(() => {}); if (!tocando && !el.paused) el.pause();
+    }
+    const iw = el.videoWidth || el.naturalWidth, ih = el.videoHeight || el.naturalHeight; if (!iw) continue;
+    const w = (o.largura || 1080) * k, h = w * ih / iw, x = (o.x || 0) * k, y = o.y == null ? (cv.height - h) / 2 : o.y * k;
+    cx.drawImage(el, x, y, w, h);
+  }
+  for (const e of Object.values(elsS)) if (e instanceof HTMLVideoElement && !ativos.has(e) && !e.paused) e.pause();
+}
+function tocar() {
+  garantirAudio(); const L = linha(); if (T >= L.total - 0.05) T = 0;
+  tocando = true; T0 = T; Tant = T; relogio0 = performance.now();
+  agendarTudo();
+  $('bt-play').innerHTML = '<svg><use href="#i-pausa"/></svg>';
+}
+function parar() { tocando = false; pararSons(); Object.values(els).concat(Object.values(elsS)).forEach((e) => e.pause && e.pause()); $('bt-play').innerHTML = '<svg><use href="#i-play"/></svg>'; }
+function irPara(t) { const L = linha(); T = Math.min(Math.max(0, t), L.total); if (tocando) { T0 = T; relogio0 = performance.now(); agendarTudo(); } }
+function escalar() { document.querySelector('.camada').style.transform = `scale(${$('tela').clientWidth / 1080})`; }
+new ResizeObserver(escalar).observe($('tela'));
+
+// ---------- timeline ----------
+function onda(picos, porSeg, t0, t1, largura, altura, ganho, mapa) {
+  if (!picos || !picos.length || largura < 4) return '';
+  const barras = Math.max(1, Math.floor(largura / 3)); let d = '';
+  for (let b = 0; b < barras; b++) {
+    const ts = t0 + (t1 - t0) * (b + 0.5) / barras; const pt = mapa ? mapa(ts) : ts; if (pt == null) continue;
+    const v = (picos[Math.floor(pt * porSeg)] || 0) / 100 * Math.min(2, ganho); const h = Math.max(1, Math.min(altura, v * altura));
+    const xx = (b * 3 + 1.5).toFixed(1); d += `M${xx} ${altura}V${(altura - h).toFixed(1)}`;
+  }
+  return `<svg class="onda" viewBox="0 0 ${largura} ${altura}" preserveAspectRatio="none"><path d="${d}"/></svg>`;
+}
+function minis(t, x, w) {
+  const m = M[t.midia]; if (!m || !m.mini) return '';
+  const tw = 25, n = Math.ceil(w / tw); let h = '';
+  for (let i = 0; i < n; i++) {
+    const pt = proxyT(t.midia, x.de + (i * tw + tw / 2) / pxs); if (pt == null) { h += `<div style="width:${tw}px"></div>`; continue; }
+    const idx = Math.min(m.mini.n - 1, Math.floor(pt * m.mini.por_seg));
+    h += `<div style="width:${tw}px;background-image:url(${m.mini.src});background-size:${m.mini.n * tw}px 44px;background-position:-${idx * tw}px 0"></div>`;
+  }
+  return `<div class="minis">${h}</div>`;
+}
+let guiaT = null;
+function desenharTimeline() {
+  const L = linha(), tr = $('trilho');
+  tr.style.width = Math.max(L.total * pxs + 120, $('rolagem').clientWidth) + 'px';
+  const passo = pxs >= 120 ? 0.5 : pxs >= 50 ? 1 : pxs >= 25 ? 2 : 5;
+  let regua = '';
+  for (let i = 0; i * passo <= L.total + 1e-6; i++) {
+    const s = i * passo, grande = Math.abs(s - Math.round(s)) < 1e-6 && (Math.round(s) % (passo >= 2 ? passo : 1) === 0);
+    regua += `<i class="${grande ? 'g' : ''}" style="left:${s * pxs}px"></i>`;
+    if (grande && (Math.round(s) % Math.max(1, passo * 2) === 0 || passo < 1)) regua += `<span style="left:${s * pxs}px">${pad(Math.floor(s / 60))}:${pad(Math.round(s) % 60)}</span>`;
+  }
+  const selAgora = selecionados(); const S = (tipo, i) => (selAgora.some((x) => x.tipo === tipo && x.i === i) ? ' sel' : '');
+  const OFF = (o) => (o && o.desativado ? ' off' : '');
+  const alcas = '<span class="alca e" data-alca="ini"></span><span class="alca d" data-alca="fim"></span>';
+  let v = '', b = '';
+  const rows = { legenda: [], sfx: [], sobre: [] };
+  for (const tp of COM_PISTA) for (let k = 0; k < nPistas(tp); k++) rows[tp].push('');
+  L.tr.forEach((x, i) => {
+    const t = x.t, w = Math.max(6, x.dur * pxs - 2), m = M[t.midia] || {}, vol = t.mudo ? 0 : (t.volume ?? 1);
+    const extra = (t.mudo ? ', mudo' : (vol !== 1 ? `, ${Math.round(vol * 100)}%` : ''));
+    const ond = m.picos ? onda(m.picos, 40, x.de, x.de + x.dur, w, 18, vol, (ts) => proxyT(t.midia, ts)) : '';
+    v += `<div class="bloco b-video${S('trecho', i)}" data-tipo="trecho" data-i="${i}" style="left:${x.ini * pxs}px;width:${w}px">${minis(t, x, w)}${ond}<span class="rot">${esc(t.midia)} ${curto(x.dur)}${extra}</span>${alcas}</div>`;
+  });
+  P.legendas.forEach((g, i) => {
+    rows.legenda[g.pista || 0] += `<div class="bloco b-leg${S('legenda', i)}${OFF(g)}" data-tipo="legenda" data-i="${i}" style="left:${g.de * pxs}px;width:${Math.max(6, (g.ate - g.de) * pxs - 1)}px" title="${esc(g.en)} / ${esc(g.pt)}"><span class="rot">${esc(g.pt || g.en || 'texto vazio')}</span>${alcas}</div>`;
+  });
+  P.sfx.forEach((x, i) => {
+    const d = durSfx(x), w = Math.max(10, d * pxs), m = M[x.midia] || {}, vol = x.volume ?? 1;
+    rows.sfx[x.pista || 0] += `<div class="bloco b-sfx${S('sfx', i)}${OFF(x)}" data-tipo="sfx" data-i="${i}" style="left:${x.em * pxs}px;width:${w}px">${onda(m.picos, 40, x.inicio || 0, (x.inicio || 0) + d, w, 18, vol)}<span class="rot">${esc(x.midia)}${vol !== 1 ? ' ' + Math.round(vol * 100) + '%' : ''}</span>${alcas}</div>`;
+  });
+  P.sobre.forEach((o, i) => {
+    const d = durSobre(o), w = Math.max(10, d * pxs - 1);
+    const mini = (M[o.midia] || {}).mini ? minis({ midia: o.midia }, { de: o.de || 0 }, w) : '';
+    rows.sobre[o.pista || 0] += `<div class="bloco b-sobre${S('sobre', i)}${OFF(o)}" data-tipo="sobre" data-i="${i}" style="left:${o.em * pxs}px;width:${w}px">${mini}<span class="rot">${esc(o.midia)} ${curto(d)}${o.mudo ? ', mudo' : ''}</span>${alcas}</div>`;
+  });
+  if (P.balao && P.balao.texto) {
+    const bb = P.balao; b = `<div class="bloco b-balao${S('balao', 0)}${OFF(bb)}" data-tipo="balao" data-i="0" style="left:${(bb.de || 0) * pxs}px;width:${Math.max(6, ((bb.ate ?? 3.5) - (bb.de || 0)) * pxs - 1)}px"><span class="rot">${esc(bb.texto)}</span>${alcas}</div>`;
+  }
+  const alvoP = arr && arr.pistaAlvo != null ? arr.tipo + ':' + arr.pistaAlvo : '';
+  const linhaP = (tp, k, cls) => `<div class="pista ${cls}${rows[tp][k] ? '' : ' vazia'}${alvoP === tp + ':' + k ? ' alvo' : ''}" data-tp="${tp}" data-pista="${k}">${rows[tp][k]}</div>`;
+  const NOMES = { sobre: 'Por cima', legenda: 'Texto', sfx: 'Áudio' }, CLS = { sobre: 'h-sobre', legenda: 'h-leg', sfx: 'h-sfx' };
+  let corpo = '', cab = '<div style="height:26px"></div>';
+  for (let k = rows.sobre.length - 1; k >= 0; k--) { corpo += linhaP('sobre', k, 'h-sobre'); cab += `<div class="h-sobre" style="margin-bottom:4px">${rows.sobre[k] ? NOMES.sobre + (k ? ' ' + (k + 1) : '') : '+ clipe'}</div>`; }
+  corpo += `<div class="pista h-video">${v}</div>`; cab += '<div class="h-video" style="margin-bottom:4px">Vídeo</div>';
+  for (const tp of ['legenda', 'sfx']) rows[tp].forEach((r, k) => { corpo += linhaP(tp, k, CLS[tp]); cab += `<div class="${CLS[tp]}" style="margin-bottom:4px">${r || !k ? NOMES[tp] + (k ? ' ' + (k + 1) : '') : '+ ' + NOMES[tp].toLowerCase()}</div>`; });
+  corpo += `<div class="pista h-balao">${b}</div>`; cab += '<div class="h-balao">Balão</div>';
+  $('cabecas').innerHTML = cab;
+  tr.innerHTML = `<div class="regua" id="regua">${regua}</div>${corpo}
+    <div class="guia" id="guia"></div><div class="cabeca" id="cabeca" style="left:${T * pxs}px"></div>`;
+  if (guiaT != null) { $('guia').style.display = 'block'; $('guia').style.left = guiaT * pxs + 'px'; }
+}
+
+// ---------- arrastar na timeline ----------
+let arr = null;
+function pontosIma(excluir) {
+  const L = linha(), pts = [0, L.total, T];
+  L.tr.forEach((x) => pts.push(x.ini, x.ini + x.dur));
+  P.legendas.forEach((l, i) => { if (!(excluir.tipo === 'legenda' && excluir.i === i)) pts.push(l.de, l.ate); });
+  P.sfx.forEach((s, i) => { if (!(excluir.tipo === 'sfx' && excluir.i === i)) pts.push(s.em, s.em + durSfx(s)); });
+  P.sobre.forEach((o, i) => { if (!(excluir.tipo === 'sobre' && excluir.i === i)) pts.push(o.em, o.em + durSobre(o)); });
+  if (P.balao && excluir.tipo !== 'balao') pts.push(P.balao.de || 0, P.balao.ate ?? 3.5);
+  return pts;
+}
+function ima(t, pts) { const lim = 8 / pxs; let melhor = null; for (const p of pts) if (Math.abs(p - t) < lim && (melhor == null || Math.abs(p - t) < Math.abs(melhor - t))) melhor = p; return melhor; }
+function tempoDoPonteiro(e) { return (e.clientX - $('trilho').getBoundingClientRect().left) / pxs; }
+
+$('trilho').addEventListener('pointerdown', (e) => {
+  if (e.button > 0) return;
+  if (e.target.closest('#regua')) { arr = { modo: 'agulha' }; parar(); irPara(tempoDoPonteiro(e)); $('trilho').setPointerCapture(e.pointerId); return; }
+  const bl = e.target.closest('.bloco');
+  if (!bl) { sel = null; multi = []; parar(); irPara(tempoDoPonteiro(e)); tudo(); return; }
+  const tipo = bl.dataset.tipo, i = +bl.dataset.i, alca = e.target.dataset.alca;
+  arr = { modo: alca || 'mover', tipo, i, add: e.ctrlKey || e.metaKey || e.shiftKey || modoVarios, x0: e.clientX, antes: JSON.stringify(P), base: clone(P), mexeu: false };
+  $('trilho').setPointerCapture(e.pointerId);
+});
+$('trilho').addEventListener('pointermove', (e) => {
+  if (!arr) return;
+  if (arr.modo === 'agulha') { irPara(tempoDoPonteiro(e)); return; }
+  if (!arr.mexeu && Math.abs(e.clientX - arr.x0) < 4) return;
+  if (!arr.mexeu) multi = [];
+  arr.mexeu = true;
+  if (arr.tipo === 'trecho' && arr.modo === 'mover') return; // trecho só apara pelas pontas
+  if (arr.modo === 'mover' && COM_PISTA.includes(arr.tipo)) { // arrastar pra cima/baixo troca de camada
+    const lin = [...document.querySelectorAll(`.pista[data-tp="${arr.tipo}"]`)];
+    const alvoL = lin.find((d) => { const r = d.getBoundingClientRect(); return e.clientY >= r.top - 2 && e.clientY < r.bottom + 2; });
+    if (alvoL) arr.pistaAlvo = +alvoL.dataset.pista;
+    else if (lin.length) { const r0 = lin[0].getBoundingClientRect(), r1 = lin[lin.length - 1].getBoundingClientRect(); if (e.clientY < Math.min(r0.top, r1.top)) arr.pistaAlvo = +(r0.top < r1.top ? lin[0] : lin[lin.length - 1]).dataset.pista; else if (e.clientY > Math.max(r0.bottom, r1.bottom)) arr.pistaAlvo = +(r0.bottom > r1.bottom ? lin[0] : lin[lin.length - 1]).dataset.pista; }
+  }
+  aplicarArraste((e.clientX - arr.x0) / pxs);
+});
+function soltar(e) {
+  if (!arr) return;
+  const a = arr; arr = null; guiaT = null;
+  if (a.modo === 'agulha') return;
+  if (a.mexeu) {
+    if (COM_PISTA.includes(a.tipo)) { // não deixa dois na mesma camada no mesmo tempo: sobe pra próxima livre
+      const lista = LISTA[a.tipo](), o = lista[a.i]; if (o) { acomodar(a.tipo, o); compactar(a.tipo); lista.sort((x, y) => iv(a.tipo, x)[0] - iv(a.tipo, y)[0]); sel = { tipo: a.tipo, i: lista.indexOf(o) }; }
+    }
+    confirmar(a.antes); tudo(); return;
+  }
+  // clique: seleciona; se a agulha estiver fora do item, leva ela pro começo dele
+  if (a.add && sel && sel.tipo === a.tipo && a.tipo !== 'balao') {
+    if (!multi.length) multi = [sel.i];
+    if (multi.includes(a.i)) { multi = multi.filter((j) => j !== a.i); if (sel.i === a.i) sel = { tipo: a.tipo, i: multi[0] }; }
+    else { multi.push(a.i); sel = { tipo: a.tipo, i: a.i }; }
+    multi.sort((x, y) => x - y); if (multi.length < 2) multi = [];
+    return tudo();
+  }
+  sel = { tipo: a.tipo, i: a.i }; multi = [];
+  const it = intervalo(sel); if (it && (T < it[0] || T >= it[1])) { parar(); irPara(it[0]); }
+  tudo();
+}
+$('trilho').addEventListener('pointerup', soltar);
+$('trilho').addEventListener('pointercancel', soltar);
+function intervalo(s) {
+  if (s.tipo === 'trecho') { const x = linha().tr[s.i]; return x && [x.ini, x.ini + x.dur]; }
+  if (s.tipo === 'legenda') { const l = P.legendas[s.i]; return l && [l.de, l.ate]; }
+  if (s.tipo === 'sfx') { const x = P.sfx[s.i]; return x && [x.em, x.em + durSfx(x)]; }
+  if (s.tipo === 'sobre') { const x = P.sobre[s.i]; return x && [x.em, x.em + durSobre(x)]; }
+  if (s.tipo === 'balao') return P.balao && [P.balao.de || 0, P.balao.ate ?? 3.5];
+}
+function aplicarArraste(dt) {
+  const B = arr.base; P = clone(B); guiaT = null;
+  const pts = pontosIma({ tipo: arr.tipo, i: arr.i }), total = linha().total;
+  const comIma = (t) => { const m = ima(t, pts); if (m != null) { guiaT = m; return m; } return t; };
+  if (arr.tipo === 'legenda') {
+    const g = P.legendas[arr.i], d = g.ate - g.de;
+    if (arr.pistaAlvo != null) { if (arr.pistaAlvo) g.pista = arr.pistaAlvo; else delete g.pista; }
+    let [ant, prox] = vizinhos('legenda', g, P.legendas); prox = Math.min(prox, total);
+    if (arr.modo === 'mover') {
+      let de = g.de + dt; const mi = ima(de, pts), mf = ima(de + d, pts);
+      if (mi != null) { de = mi; guiaT = mi; } else if (mf != null) { de = mf - d; guiaT = mf; }
+      de = Math.min(Math.max(de, 0), total - d); g.de = r3(de); g.ate = r3(de + d);
+    } else if (arr.modo === 'ini') g.de = r3(Math.min(Math.max(comIma(g.de + dt), ant), g.ate - 0.1));
+    else g.ate = r3(Math.max(Math.min(comIma(g.ate + dt), prox), g.de + 0.1));
+    sel = { tipo: 'legenda', i: arr.i };
+  } else if (arr.tipo === 'sfx') {
+    const s = P.sfx[arr.i], m = M[s.midia] || {}, maxM = Math.min(m.duracao || 12, 12);
+    if (arr.pistaAlvo != null) { if (arr.pistaAlvo) s.pista = arr.pistaAlvo; else delete s.pista; }
+    if (arr.modo === 'mover') s.em = r3(Math.min(Math.max(comIma(s.em + dt), 0), total));
+    else if (arr.modo === 'ini') { // borda esquerda: corta o começo do som (ou devolve), o resto fica no lugar
+      const ini0 = s.inicio || 0, d0 = durSfx(s); let delta = comIma(s.em + dt) - s.em;
+      delta = Math.min(Math.max(delta, -ini0, -s.em), d0 - 0.05);
+      s.em = r3(s.em + delta); s.inicio = r3(ini0 + delta); s.duracao = r3(d0 - delta); if (!s.inicio) delete s.inicio;
+    } else { const d = Math.min(Math.max(comIma(s.em + durSfx(s) + dt) - s.em, 0.05), maxM - (s.inicio || 0)); s.duracao = r3(d); }
+    sel = { tipo: 'sfx', i: arr.i };
+  } else if (arr.tipo === 'sobre') {
+    const o = P.sobre[arr.i], m = M[o.midia] || {}, img = m.tipo === 'imagem';
+    if (arr.pistaAlvo != null) { if (arr.pistaAlvo) o.pista = arr.pistaAlvo; else delete o.pista; }
+    if (arr.modo === 'mover') o.em = r3(Math.min(Math.max(comIma(o.em + dt), 0), total));
+    else if (arr.modo === 'ini') {
+      const d0 = durSobre(o); let delta = comIma(o.em + dt) - o.em;
+      delta = Math.min(Math.max(delta, img ? -o.em : Math.max(-(o.de || 0), -o.em)), d0 - 0.1);
+      o.em = r3(o.em + delta); if (img) o.duracao = r3(d0 - delta); else o.de = r3((o.de || 0) + delta);
+    } else {
+      let fim = comIma(o.em + durSobre(o) + dt) - o.em;
+      if (img) o.duracao = r3(Math.max(0.1, fim)); else o.ate = r3(Math.max(Math.min((o.de || 0) + fim, m.duracao || 1e9), (o.de || 0) + 0.1));
+    }
+    sel = { tipo: 'sobre', i: arr.i };
+  } else if (arr.tipo === 'balao') {
+    const b = P.balao, de0 = b.de || 0, ate0 = b.ate ?? 3.5, d = ate0 - de0;
+    if (arr.modo === 'mover') { let de = Math.min(Math.max(comIma(de0 + dt), 0), total - d); b.de = r3(de); b.ate = r3(de + d); }
+    else if (arr.modo === 'ini') b.de = r3(Math.min(Math.max(comIma(de0 + dt), 0), ate0 - 0.1));
+    else b.ate = r3(Math.max(Math.min(comIma(ate0 + dt), total), de0 + 0.1));
+    sel = { tipo: 'balao', i: 0 };
+  } else if (arr.tipo === 'trecho') {
+    const t = P.trechos[arr.i], m = M[t.midia] || {};
+    if (m.tipo === 'imagem') { if (arr.modo === 'fim') t.duracao = r3(Math.max(0.1, (t.duracao || 1) + dt)); }
+    else if (arr.modo === 'ini') t.de = r3(Math.min(Math.max(0, t.de + dt), t.ate - 0.1));
+    else { const x = estrutura(P.trechos)[arr.i]; let ate = t.ate + dt; const fimTl = comIma(x.ini + (ate - t.de)); ate = t.de + (fimTl - x.ini); t.ate = r3(Math.max(Math.min(ate, m.duracao || 1e9), t.de + 0.1)); }
+    remapear(B.trechos, P.trechos, (k) => k);
+    sel = { tipo: 'trecho', i: arr.i };
+  }
+  textoAtual = null; desenharTimeline(); props();
+}
+
+// ---------- ações ----------
+function dividir() {
+  const tq = r3(q(T));
+  if (sel && sel.tipo === 'legenda') {
+    const g = P.legendas[sel.i]; if (!(g.de + 0.05 < tq && tq < g.ate - 0.05)) return aviso('Ponha a agulha dentro da legenda');
+    return mudar(() => { const b = clone(g); g.ate = tq; b.de = tq; P.legendas.splice(sel.i + 1, 0, b); sel = { tipo: 'legenda', i: sel.i + 1 }; tudo(); });
+  }
+  if (sel && sel.tipo === 'balao') return aviso('O balão não divide');
+  const L = linha(), k = trechoEm(T, L.tr, false), x = L.tr[k];
+  if (!x || (M[x.t.midia] || {}).tipo === 'imagem') return aviso('Não dá pra dividir aqui');
+  if (T - x.ini < 0.05 || x.ini + x.dur - T < 0.05) return aviso('Ponha a agulha mais pro meio do trecho');
+  mudar(() => { const t = P.trechos[k], b = clone(t), c = r3(x.de + (T - x.ini)); t.ate = c; b.de = c; P.trechos.splice(k + 1, 0, b); sel = { tipo: 'trecho', i: k + 1 }; tudo(); });
+  aviso('Dividido');
+}
+function apagar() {
+  if (!sel) return aviso('Selecione algo na linha do tempo');
+  if (multi.length > 1) {
+    const tipo = sel.tipo, idx = [...multi].sort((a, b) => b - a);
+    if (tipo === 'trecho' && idx.length >= P.trechos.length) return aviso('O vídeo precisa de pelo menos um trecho');
+    return mudar(() => {
+      for (const k of idx) {
+        if (tipo === 'trecho') { const velho = clone(P.trechos); P.trechos.splice(k, 1); remapear(velho, P.trechos, (j) => (j < k ? j : j === k ? -1 : j - 1)); }
+        else LISTA[tipo]().splice(k, 1);
+      }
+      aviso(`${idx.length} apagados`); sel = null; multi = []; textoAtual = null; tudo();
+    });
+  }
+  if (sel.tipo === 'trecho') {
+    if (P.trechos.length < 2) return aviso('O vídeo precisa de pelo menos um trecho');
+    const k = sel.i;
+    return mudar(() => { const velho = clone(P.trechos); P.trechos.splice(k, 1); remapear(velho, P.trechos, (j) => (j < k ? j : j === k ? -1 : j - 1)); sel = null; tudo(); });
+  }
+  mudar(() => {
+    if (sel.tipo === 'legenda') P.legendas.splice(sel.i, 1);
+    if (sel.tipo === 'sfx') P.sfx.splice(sel.i, 1);
+    if (sel.tipo === 'sobre') P.sobre.splice(sel.i, 1);
+    if (['legenda', 'sfx', 'sobre'].includes(sel.tipo)) compactar(sel.tipo);
+    if (sel.tipo === 'balao') delete P.balao;
+    sel = null; textoAtual = null; tudo();
+  });
+}
+function alternarDesativado() {
+  const itens = selecionados().filter((x) => x.tipo !== 'trecho');
+  if (!itens.length) return aviso(sel ? 'Trecho de vídeo não desativa: use Sem som ou apague' : 'Selecione legenda, SFX ou balão');
+  const objs = itens.map(itemDe).filter(Boolean), novo = !objs.every((o) => o.desativado);
+  mudar(() => { objs.forEach((o) => { if (novo) o.desativado = true; else delete o.desativado; }); textoAtual = null; tudo(); });
+  aviso(novo ? (objs.length > 1 ? `${objs.length} desativados` : 'Desativado') : (objs.length > 1 ? `${objs.length} ativados` : 'Ativado'));
+}
+function selecionarTodos(tipo) {
+  tipo = tipo || (sel && sel.tipo !== 'balao' ? sel.tipo : 'trecho');
+  const n = LISTA[tipo]().length; if (!n) return;
+  sel = { tipo, i: 0 }; multi = n > 1 ? [...Array(n).keys()] : []; tudo();
+}
+function addLegenda() {
+  const de = r3(q(T)), total = linha().total;
+  const ate = r3(Math.min(de + 1.5, total)); if (ate - de < 0.1) return aviso('Sem espaço aqui');
+  mudar(() => { const nova = { de, ate, en: '', pt: '' }; acomodar('legenda', nova); if (nova.pista) nova.estilo = { y: 500 }; P.legendas.push(nova); P.legendas.sort((a, b) => a.de - b.de); sel = { tipo: 'legenda', i: P.legendas.indexOf(nova) }; tudo(); });
+  setTimeout(() => { const c = document.querySelector('[data-c="pt"]'); c && c.focus(); }, 0);
+}
+function addSfx(nome) {
+  mudar(() => { const novo = { midia: nome, em: r3(q(T)), volume: 1 }; acomodar('sfx', novo); P.sfx.push(novo); P.sfx.sort((a, b) => a.em - b.em); sel = { tipo: 'sfx', i: P.sfx.indexOf(novo) }; tudo(); });
+  aviso(`${nome} em ${curto(T)}`);
+}
+
+function addSobre(nome) {
+  const m = M[nome] || {};
+  mudar(() => {
+    const novo = { midia: nome, em: r3(q(T)), largura: 1080 };
+    if (m.tipo === 'imagem') novo.duracao = 2;
+    else { const seg = (m.mapa || [])[0] || { a: 0, b: 3 }; novo.de = r3(seg.a); novo.ate = r3(Math.min(seg.b, seg.a + 3)); }
+    acomodar('sobre', novo); P.sobre.push(novo); sel = { tipo: 'sobre', i: P.sobre.indexOf(novo) }; tudo();
+  });
+  aviso(`${nome} por cima em ${curto(T)}`);
+}
+
+// ---------- painel de sons ----------
+function sons() {
+  const lista = Object.entries(M).filter(([, m]) => m.tipo === 'audio');
+  let corpo = '';
+  if (abaSons === 'sons') {
+    corpo = lista.length ? `<div class="lista">${lista.map(([n, m]) => `<div class="item-som"><button class="icone" data-ouvir="${esc(n)}" title="Ouvir"><svg><use href="#i-ouvir"/></svg></button><span>${esc(n)} <small>${curto(Math.min(m.duracao || 0, 12))}</small></span><button class="add" data-add="${esc(n)}">+ agulha</button></div>`).join('')}</div>`
+      : '<p class="vazio">Nenhum som neste projeto. Pede pro King Bot pôr os sons da pasta.</p>';
+  } else if (abaSons === 'clipes') {
+    const cl = Object.entries(M).filter(([, m]) => m.tipo === 'video' || m.tipo === 'imagem');
+    corpo = cl.length ? `<div class="lista">${cl.map(([n, m]) => `<div class="item-som"><span>${esc(n)} <small>${m.tipo === 'imagem' ? 'imagem' : curto((m.mapa || []).reduce((t, x) => t + x.b - x.a, 0))}</small></span><button class="add" data-sobre="${esc(n)}">+ por cima</button></div>`).join('')}</div>`
+      : '<p class="vazio">Nenhum clipe neste projeto.</p>';
+  } else {
+    corpo = `<div class="lista"><button data-acao="add-leg">+ Texto na agulha</button>${P.balao ? '' : '<button data-acao="add-balao">+ Balão no topo</button>'}<button data-acao="estilo">Estilo das legendas</button></div>`;
+  }
+  $('sons').innerHTML = `<div class="abas"><button data-aba="sons" class="${abaSons === 'sons' ? 'on' : ''}">Sons</button><button data-aba="texto" class="${abaSons === 'texto' ? 'on' : ''}">Texto</button><button data-aba="clipes" class="${abaSons === 'clipes' ? 'on' : ''}">Clipes</button></div>${corpo}`;
+}
+$('sons').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.aba) { abaSons = b.dataset.aba; return sons(); }
+  if (b.dataset.ouvir) { garantirAudio(); return tocarSom(b.dataset.ouvir, 1); }
+  if (b.dataset.add) return addSfx(b.dataset.add);
+  if (b.dataset.sobre) return addSobre(b.dataset.sobre);
+  if (b.dataset.acao === 'add-leg') return addLegenda();
+  if (b.dataset.acao === 'add-balao') return mudar(() => { P.balao = { texto: 'Texto do balão', de: 0, ate: Math.min(3.5, linha().total) }; sel = { tipo: 'balao', i: 0 }; textoAtual = null; tudo(); });
+  if (b.dataset.acao === 'estilo') { sel = null; tudo(); }
+});
+
+// ---------- propriedades ----------
+const n3 = (v) => Math.round(v * 1000) / 1000;
+function barra(rot, chave, valor, min, max, passo, fmt) {
+  return `<div class="barra"><span>${rot}</span><input type="range" data-c="${chave}" min="${min}" max="${max}" step="${passo}" value="${valor}"><output>${fmt(valor)}</output></div>`;
+}
+const pct = (v) => Math.round(v) + '%';
+function props() {
+  const el = $('props'); if (el.contains(document.activeElement) && document.activeElement.matches('textarea, input[type=number], input[type=text]')) return;
+  if (sel && multi.length > 1) {
+    const nomes = { trecho: 'trechos de vídeo', legenda: 'textos', sfx: 'áudios', sobre: 'clipes por cima' }, lista = LISTA[sel.tipo](), itens = multi.map((i) => lista[i]);
+    const v0 = Math.round(((itens[0] || {}).volume ?? 1) * 100), todosOff = itens.every((o) => o.desativado);
+    el.innerHTML = `<h2>${multi.length} ${nomes[sel.tipo]}</h2>
+      ${sel.tipo !== 'legenda' ? barra('Volume', 'volume', v0, 0, 200, 1, pct) : ''}
+      ${sel.tipo === 'trecho' ? `<label class="alternar"><input type="checkbox" data-c="mudo" ${itens.every((o) => o.mudo) ? 'checked' : ''}> Sem som</label>` : `<label class="alternar"><input type="checkbox" data-c="desativado" ${todosOff ? 'checked' : ''}> Desativados</label>`}
+      <div class="linha-botoes">${multi.length < lista.length ? `<button data-todos>Selecionar todos (${lista.length})</button>` : ''}<button data-limpar>Só um</button></div>`;
+    return;
+  }
+  if (!sel) {
+    const e = P.estilo.legenda || {}, b = P.estilo.balao || {};
+    const selF = (rot, chave, atual) => `<label>${rot}<select data-c="${chave}">${FONTES.map((f) => `<option style="font-family:'${f}'" ${f === (atual || 'Montserrat') ? 'selected' : ''}>${f}</option>`).join('')}</select></label>`;
+    el.innerHTML = `<h2>Estilo das legendas</h2>
+      <div class="grade2">${selF('Fonte do inglês', 'g:legenda:fonte_en', e.fonte_en)}${selF('Fonte do português', 'g:legenda:fonte_pt', e.fonte_pt)}${P.balao ? selF('Fonte do balão', 'g:balao:fonte', b.fonte) : ''}</div>
+      ${barra('Inglês', 'g:legenda:tam_en', e.tam_en ?? 40, 24, 90, 1, (v) => v + 'px')}
+      ${barra('Português', 'g:legenda:tam_pt', e.tam_pt ?? 48, 24, 100, 1, (v) => v + 'px')}
+      ${barra('Altura', 'g:legenda:y', e.y ?? 960, 300, 1700, 5, (v) => v)}
+      ${barra('Largura', 'g:legenda:largura', e.largura ?? 880, 500, 1040, 10, (v) => v)}
+      ${P.balao ? barra('Balão', 'g:balao:tam', b.tam ?? 40, 24, 80, 1, (v) => v + 'px') + barra('Altura balão', 'g:balao:y', b.y ?? 40, 0, 600, 5, (v) => v) : ''}
+      <div class="grade2"><label>Cor do inglês<input type="color" data-c="g:legenda:cor_en" value="${e.cor_en || '#ffffff'}"></label>
+      <label>Cor do português<input type="color" data-c="g:legenda:cor_pt" value="${e.cor_pt || '#ffe81a'}"></label></div>`;
+    return;
+  }
+  const chkOff = (o, rot) => `<label class="alternar"><input type="checkbox" data-c="desativado" ${o.desativado ? 'checked' : ''}> ${rot}</label>`;
+  if (sel.tipo === 'legenda') {
+    const g = P.legendas[sel.i];
+    el.innerHTML = `<h2>Legenda</h2>${chkOff(g, 'Desativada')}
+      <label>Inglês<textarea data-c="en">${esc(g.en)}</textarea></label>
+      <label>Português<textarea data-c="pt">${esc(g.pt)}</textarea></label>
+      ${barra('Altura na tela', 'y', (g.estilo || {}).y ?? ((P.estilo.legenda || {}).y ?? 960), 100, 1800, 5, (v) => v)}
+      <div class="grade2"><label>Começa (s)<input type="number" step="0.01" data-c="de" value="${n3(g.de)}"></label><label>Termina (s)<input type="number" step="0.01" data-c="ate" value="${n3(g.ate)}"></label></div>`;
+  } else if (sel.tipo === 'trecho') {
+    const x = linha().tr[sel.i], t = x.t, m = M[t.midia] || {};
+    el.innerHTML = `<h2>Vídeo: ${esc(t.midia)}</h2>
+      ${barra('Volume', 'volume', Math.round((t.volume ?? 1) * 100), 0, 200, 1, pct)}
+      <label class="alternar"><input type="checkbox" data-c="mudo" ${t.mudo ? 'checked' : ''}> Sem som</label>
+      ${barra('Zoom', 'zoom', Math.round((t.zoom || 1) * 100), 100, 250, 1, pct)}
+      <label>Encaixe<select data-c="encaixe"><option value="">Cobrir a tela</option><option value="borrado" ${t.encaixe === 'borrado' ? 'selected' : ''}>Inteiro, fundo borrado</option><option value="conter" ${t.encaixe === 'conter' ? 'selected' : ''}>Inteiro, faixas pretas</option></select></label>
+      ${m.tipo === 'imagem' ? `<label>Duração (s)<input type="number" step="0.05" data-c="duracao" value="${n3(t.duracao || 1)}"></label>` :
+        `<div class="grade2"><label>Início no original (s)<input type="number" step="0.01" data-c="de" value="${n3(t.de)}"></label><label>Fim no original (s)<input type="number" step="0.01" data-c="ate" value="${n3(t.ate)}"></label></div>`}`;
+  } else if (sel.tipo === 'sfx') {
+    const s = P.sfx[sel.i], op = Object.entries(M).filter(([, m]) => m.tipo === 'audio').map(([n]) => `<option ${n === s.midia ? 'selected' : ''}>${esc(n)}</option>`).join('');
+    el.innerHTML = `<h2>Efeito sonoro</h2>${chkOff(s, 'Desativado')}
+      ${barra('Volume', 'volume', Math.round((s.volume ?? 1) * 100), 0, 200, 1, pct)}
+      <label>Som<select data-c="midia">${op}</select></label>
+      <div class="grade2"><label>Toca em (s)<input type="number" step="0.01" data-c="em" value="${n3(s.em)}"></label>
+      <div style="display:flex;align-items:end"><button data-ouvir-sel style="width:100%">Ouvir</button></div></div>`;
+  } else if (sel.tipo === 'sobre') {
+    const o = P.sobre[sel.i], m = M[o.midia] || {};
+    el.innerHTML = `<h2>Por cima: ${esc(o.midia)}</h2>${chkOff(o, 'Desativado')}
+      ${barra('Tamanho', 'largura', Math.round(o.largura || 1080), 100, 1080, 10, (v) => v)}
+      ${barra('Esquerda', 'x', Math.round(o.x || 0), -540, 1080, 5, (v) => v)}
+      ${barra('Altura', 'ytopo', Math.round(o.y ?? -1), -1, 1900, 5, (v) => (v < 0 ? 'centro' : v))}
+      ${m.tipo === 'video' ? barra('Volume', 'volume', Math.round((o.volume ?? 1) * 100), 0, 200, 1, pct) + `<label class="alternar"><input type="checkbox" data-c="mudo" ${o.mudo ? 'checked' : ''}> Sem som</label>` : ''}
+      <div class="grade2"><label>Entra em (s)<input type="number" step="0.01" data-c="em" value="${n3(o.em)}"></label>
+      ${m.tipo === 'imagem' ? `<label>Duração (s)<input type="number" step="0.05" data-c="duracao" value="${n3(o.duracao || 2)}"></label>` : `<label>Começa no original (s)<input type="number" step="0.01" data-c="de" value="${n3(o.de || 0)}"></label>`}</div>`;
+  } else if (sel.tipo === 'balao') {
+    const b = P.balao;
+    el.innerHTML = `<h2>Balão do topo</h2>${chkOff(b, 'Desativado')}<label>Texto<textarea data-c="texto">${esc(b.texto)}</textarea></label>
+      <div class="grade2"><label>Começa (s)<input type="number" step="0.01" data-c="de" value="${n3(b.de || 0)}"></label><label>Termina (s)<input type="number" step="0.01" data-c="ate" value="${n3(b.ate ?? 3.5)}"></label></div>`;
+  }
+}
+function alvo() { return sel && (sel.tipo === 'legenda' ? P.legendas[sel.i] : sel.tipo === 'sfx' ? P.sfx[sel.i] : sel.tipo === 'sobre' ? P.sobre[sel.i] : sel.tipo === 'balao' ? P.balao : sel.tipo === 'trecho' ? P.trechos[sel.i] : null); }
+function aplicar(c, v) {
+  if (c.startsWith('g:')) { const [, g, k] = c.split(':'); P.estilo[g] = P.estilo[g] || {}; P.estilo[g][k] = v; textoAtual = null; return; }
+  if (sel && multi.length > 1) {
+    const lista = LISTA[sel.tipo]();
+    for (const i of multi) { const o = lista[i]; if (!o) continue;
+      if (c === 'volume') o.volume = v / 100; else if (v) o[c] = true; else delete o[c]; }
+    textoAtual = null; return;
+  }
+  const o = alvo(); if (!o) return;
+  if (sel.tipo === 'trecho' && (c === 'de' || c === 'ate' || c === 'duracao')) {
+    const velho = clone(P.trechos), m = M[o.midia] || {};
+    if (c === 'de') o.de = r3(Math.min(Math.max(0, v), o.ate - 0.1));
+    else if (c === 'ate') o.ate = r3(Math.max(Math.min(v, m.duracao || 1e9), o.de + 0.1));
+    else o.duracao = r3(Math.max(0.1, v));
+    return remapear(velho, P.trechos, (k) => k);
+  }
+  if (sel.tipo === 'legenda' && c === 'y') { o.estilo = { ...(o.estilo || {}), y: v }; textoAtual = null; return; }
+  if (sel.tipo === 'sobre' && c === 'ytopo') { if (v < 0) delete o.y; else o.y = v; return; }
+  if (sel.tipo === 'sobre' && c === 'de') { const d = durSobre(o); o.de = r3(Math.max(0, v)); o.ate = r3(o.de + d); return; }
+  if (c === 'volume' || c === 'zoom') { v = v / 100; if (c === 'zoom' && v === 1) { delete o.zoom; return; } }
+  if ((c === 'mudo' || c === 'desativado') && !v) { delete o[c]; textoAtual = null; return; }
+  if (c === 'encaixe' && !v) { delete o.encaixe; return; }
+  o[c] = v;
+  if (sel.tipo === 'legenda') { if (o.ate <= o.de) o.ate = r3(o.de + 0.1); P.legendas.sort((a, b) => a.de - b.de); sel.i = P.legendas.indexOf(o); }
+  if (sel.tipo === 'sfx' && c === 'em') { P.sfx.sort((a, b) => a.em - b.em); sel.i = P.sfx.indexOf(o); }
+  textoAtual = null;
+}
+$('props').addEventListener('input', (e) => {
+  const c = e.target.dataset.c; if (!c) return;
+  const tp = e.target.type;
+  if (e.target.tagName === 'TEXTAREA' || tp === 'range' || tp === 'color') {
+    abrirPendente();
+    aplicar(c, tp === 'range' ? +e.target.value : e.target.value);
+    if (tp === 'range') { const o = e.target.parentElement.querySelector('output'); if (o) o.textContent = c.includes('tam') ? e.target.value + 'px' : (c === 'volume' || c === 'zoom') ? e.target.value + '%' : (c === 'ytopo' && +e.target.value < 0) ? 'centro' : e.target.value; }
+    desenharTimeline();
+  }
+});
+$('props').addEventListener('change', (e) => {
+  const c = e.target.dataset.c; if (!c) return;
+  const tp = e.target.type;
+  if (e.target.tagName === 'TEXTAREA' || tp === 'range' || tp === 'color') { fecharPendente(); return; }
+  mudar(() => aplicar(c, tp === 'checkbox' ? e.target.checked : tp === 'number' ? +e.target.value : e.target.value));
+  e.target.blur(); tudo();
+});
+$('props').addEventListener('focusout', () => { if (pendente != null) fecharPendente(); });
+$('props').addEventListener('click', (e) => {
+  if (e.target.closest('[data-todos]')) return selecionarTodos(sel.tipo);
+  if (e.target.closest('[data-limpar]')) { multi = []; return tudo(); } if (e.target.closest('[data-ouvir-sel]')) { garantirAudio(); const s = P.sfx[sel.i]; tocarSom(s.midia, s.volume ?? 1, s.inicio || 0, s.duracao ? (s.inicio || 0) + s.duracao : null); } });
+
+// ---------- botões e teclado ----------
+$('bt-play').onclick = () => (tocando ? parar() : tocar());
+$('bt-desfazer').onclick = desfazer;
+$('bt-refazer').onclick = refazer;
+$('bt-split').onclick = dividir;
+$('bt-apagar').onclick = apagar;
+$('bt-olho').onclick = alternarDesativado;
+$('bt-varios').onclick = () => { modoVarios = !modoVarios; $('bt-varios').classList.toggle('on', modoVarios); aviso(modoVarios ? 'Toque nos blocos pra juntar na seleção' : 'Seleção simples'); };
+function zoom(v) { const r = $('rolagem'), centro = (r.scrollLeft + r.clientWidth / 2) / pxs; pxs = Math.min(300, Math.max(20, v)); $('zoom').value = pxs; desenharTimeline(); r.scrollLeft = centro * pxs - r.clientWidth / 2; }
+$('zoom').oninput = (e) => zoom(+e.target.value);
+$('bt-zmenos').onclick = () => zoom(pxs / 1.3);
+$('bt-zmais').onclick = () => zoom(pxs * 1.3);
+$('rolagem').addEventListener('wheel', (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); zoom(pxs * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); } }, { passive: false });
+$('bt-baixar').onclick = () => {
+  fecharPendente();
+  const txt = JSON.stringify(P, null, 2), nome = (P.nome || 'projeto') + '.json';
+  if (window.kingbot && window.kingbot.download) window.kingbot.download(nome, txt, 'application/json');
+  else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'application/json' })); a.download = nome; a.click(); }
+  ultimoBaixado = JSON.stringify(P);
+  aviso('Projeto baixado: manda o arquivo .json no chat');
+};
+document.addEventListener('keydown', (e) => {
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (mod && k === 's') { e.preventDefault(); return $('bt-baixar').onclick(); }
+  if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); return desfazer(); }
+  if (mod && ((k === 'z' && e.shiftKey) || k === 'y')) { e.preventDefault(); return refazer(); }
+  if (document.activeElement.matches('textarea, input:not([type=range]):not([type=checkbox]), select')) return;
+  if (e.code === 'Space') { e.preventDefault(); tocando ? parar() : tocar(); }
+  else if (mod && k === 'b') { e.preventDefault(); dividir(); }
+  else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); apagar(); }
+  else if (mod && k === 'a') { e.preventDefault(); selecionarTodos(); }
+  else if (!mod && k === 'h') { alternarDesativado(); }
+  else if (e.key === 'Escape') { sel = null; multi = []; tudo(); }
+  else if (e.key === 'ArrowLeft') { parar(); irPara(T - 1 / FPS); }
+  else if (e.key === 'ArrowRight') { parar(); irPara(T + 1 / FPS); }
+});
+
+function tudo() { textoAtual = null; desenharTimeline(); props(); sons(); botoesHist(); guardar(); }
+
+// ---------- edição guardada sozinha (10/11: o Zaza salvou a página e a edição se perdeu) ----------
+// Guarda no navegador a cada mudança; ao reabrir a mesma página, volta onde parou.
+// Ctrl+S baixa o projeto (em vez de salvar a página, que não leva a edição); fechar com edição
+// não baixada pede confirmação.
+const CHAVE = 'kbeditor:' + (DADOS.projeto.nome || '') + ':' + JSON.stringify(DADOS.projeto).length;
+const ORIGINAL = JSON.stringify(DADOS.projeto);
+let ultimoBaixado = ORIGINAL;
+function guardar() { try { localStorage.setItem(CHAVE, JSON.stringify(P)); } catch (e) { } }
+function sujo() { return JSON.stringify(P) !== ultimoBaixado; }
+(function recuperar() {
+  let salvo = null;
+  try { salvo = localStorage.getItem(CHAVE); } catch (e) { }
+  if (salvo && salvo !== ORIGINAL) {
+    try { pilhaD.push(JSON.stringify(P)); P = JSON.parse(salvo); setTimeout(() => aviso('Voltei na tua edição de antes (Ctrl+Z volta pro original)'), 300); } catch (e) { }
+  }
+})();
+window.addEventListener('beforeunload', (e) => { fecharPendente(); if (sujo()) { e.preventDefault(); e.returnValue = ''; } });
+$('titulo').textContent = P.nome ? P.nome.replace(/_/g, ' ') : 'Editor';
+requestAnimationFrame(() => { const L = linha(); pxs = Math.min(300, Math.max(20, ($('rolagem').clientWidth - 40) / Math.max(1, L.total))); $('zoom').value = pxs; tudo(); escalar(); requestAnimationFrame(quadro); });
+</script>
+</body>
+</html>

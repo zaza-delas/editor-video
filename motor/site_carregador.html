@@ -1,0 +1,195 @@
+<!-- versão online (GitHub Pages): abre o projeto do repo privado, salva sozinho e puxa o que o King Bot mudar -->
+<style>
+#inicio { position: fixed; inset: 0; z-index: 50; background: var(--fundo); display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: 48px 16px; font-family: var(--ui); }
+#inicio .ini-caixa { width: 100%; max-width: 460px; }
+#inicio h2 { font-size: 26px; margin: 0 0 4px; font-weight: 600; }
+#inicio .sub { color: var(--fraco); margin: 0 0 24px; font-size: 15px; }
+#inicio .cartao { background: var(--painel); border: 1px solid var(--linha); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+#inicio label { display: block; font-size: 14px; color: var(--fraco); margin-bottom: 8px; }
+#inicio input[type=password] { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--linha); background: var(--painel2); color: var(--texto); font: inherit; font-size: 15px; }
+#inicio button { font: inherit; font-size: 15px; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--linha); background: var(--painel2); color: var(--texto); cursor: pointer; }
+#inicio button.principal { background: var(--destaque); color: #031419; border-color: var(--destaque); font-weight: 600; }
+#inicio .linha { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+#inicio .projetos button { display: flex; justify-content: space-between; width: 100%; text-align: left; margin-bottom: 8px; padding: 12px 14px; }
+#inicio .projetos button span { color: var(--fraco); font-size: 13px; }
+#inicio .erro { color: #ff8a8a; font-size: 14px; margin-top: 8px; min-height: 1em; }
+#inicio .fraco { color: var(--fraco); font-size: 13px; }
+#inicio a { color: var(--destaque); }
+#estado-nuvem { font-size: 13px; color: var(--fraco); margin-right: 8px; white-space: nowrap; }
+</style>
+<div id="inicio">
+  <div class="ini-caixa">
+    <h2>Editor do Zaza</h2>
+    <p class="sub">Abre um projeto, edita, e ele se salva sozinho no GitHub.</p>
+    <div class="cartao" id="bloco-token" hidden>
+      <label for="token">Token do GitHub (fica só neste navegador)</label>
+      <input type="password" id="token" placeholder="github_pat_..." autocomplete="off">
+      <div class="linha"><button class="principal" id="bt-token">Entrar</button></div>
+      <div class="erro" id="erro-token"></div>
+    </div>
+    <div class="cartao" id="bloco-projetos" hidden>
+      <label>Projetos</label>
+      <div class="projetos" id="lista-projetos"><span class="fraco">Carregando...</span></div>
+      <div class="erro" id="erro-projetos"></div>
+      <div class="linha"><button id="bt-sair">Trocar token</button></div>
+    </div>
+    <div class="cartao">
+      <label>Ou abre um editor.html que veio no chat</label>
+      <input type="file" id="arquivo" accept=".html,.json">
+      <p class="fraco">Nesse modo nada vai pro GitHub: o Ctrl+S baixa o projeto.json, como antes.</p>
+    </div>
+  </div>
+</div>
+<script>
+const NUVEM = { dono: 'zaza-delas', repo: 'editor-video-projetos', ramo: 'main' };
+const API = `https://api.github.com/repos/${NUVEM.dono}/${NUVEM.repo}`;
+const nuvem = { modo: null, nome: null, sha: null, shaMidias: null, salvando: false, timer: null, ultimoLido: null };
+const $$ = (id) => document.getElementById(id);
+const tokenSalvo = () => { try { return localStorage.getItem('kbeditor:token') || ''; } catch (e) { return ''; } };
+const b64txt = (b) => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\n/g, '')), (c) => c.charCodeAt(0)));
+function txtb64(t) { const by = new TextEncoder().encode(t); let s = ''; for (let i = 0; i < by.length; i += 0x8000) s += String.fromCharCode.apply(null, by.subarray(i, i + 0x8000)); return btoa(s); }
+
+async function gh(caminho, opc = {}) {
+  const r = await fetch(API + caminho, {
+    method: opc.method || 'GET', cache: 'no-store',
+    headers: { Authorization: 'Bearer ' + tokenSalvo(), Accept: opc.raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    body: opc.body ? JSON.stringify(opc.body) : undefined,
+  });
+  if (!r.ok) { const e = new Error('GitHub ' + r.status); e.status = r.status; try { e.info = await r.json(); } catch (x) { } throw e; }
+  return opc.raw ? r.text() : r.json();
+}
+const pasta = (nome) => '/contents/projetos/' + encodeURIComponent(nome);
+
+async function telaInicio() {
+  const tk = tokenSalvo();
+  $$('bloco-token').hidden = !!tk; $$('bloco-projetos').hidden = !tk;
+  if (!tk) return;
+  try {
+    let itens;
+    try { itens = JSON.parse(await gh('/contents/projetos/indice.json', { raw: true })); }
+    catch (e) { if (e.status === 401) throw e; itens = (await gh('/contents/projetos').catch(() => [])).filter((x) => x.type === 'dir').map((x) => ({ nome: x.name })); }
+    const L = $$('lista-projetos'); L.innerHTML = '';
+    if (!itens.length) L.innerHTML = '<span class="fraco">Nenhum projeto ainda. O King Bot sobe os projetos aqui.</span>';
+    for (const it of itens) {
+      const b = document.createElement('button');
+      b.innerHTML = `${esc0(it.nome.replace(/_/g, ' '))} <span>${esc0(it.quando || '')}</span>`;
+      b.onclick = () => { history.replaceState(null, '', '?p=' + encodeURIComponent(it.nome)); abrirNuvem(it.nome); };
+      L.appendChild(b);
+    }
+  } catch (e) {
+    if (e.status === 401 || e.status === 403 || e.status === 404) { $$('erro-projetos').textContent = 'Token sem acesso ao repo de projetos. Confere se marcou o editor-video-projetos com Contents: Read and write.'; }
+    else $$('erro-projetos').textContent = 'Não consegui falar com o GitHub (' + e.message + ').';
+  }
+}
+const esc0 = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+$$('bt-token').onclick = async () => {
+  const tk = $$('token').value.trim();
+  if (!tk) return;
+  try { localStorage.setItem('kbeditor:token', tk); } catch (e) { }
+  try { await gh(''); $$('erro-token').textContent = ''; telaInicio(); }
+  catch (e) { localStorage.removeItem('kbeditor:token'); $$('erro-token').textContent = e.status === 404 || e.status === 401 ? 'Token não abriu o repo editor-video-projetos. Confere o repo marcado e a permissão Contents.' : 'Erro: ' + e.message; }
+};
+$$('token').addEventListener('keydown', (e) => { if (e.key === 'Enter') $$('bt-token').onclick(); });
+$$('bt-sair').onclick = () => { localStorage.removeItem('kbeditor:token'); $$('token').value = ''; telaInicio(); };
+
+$$('arquivo').onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const txt = await f.text();
+  let dados = null;
+  try {
+    if (f.name.endsWith('.json')) dados = JSON.parse(txt);
+    else { const m = txt.match(/const DADOS = (\{[\s\S]*?\});\s*\nconst FPS/); dados = m && JSON.parse(m[1]); }
+  } catch (x) { dados = null; }
+  if (!dados || !dados.projeto || !dados.midias) return alert('Esse arquivo não é uma página do editor (editor.html).');
+  nuvem.modo = 'arquivo'; iniciarEditor(dados);
+};
+
+async function abrirNuvem(nome) {
+  $$('lista-projetos').innerHTML = '<span class="fraco">Abrindo ' + esc0(nome) + '... (a mídia leve pode levar uns segundos)</span>';
+  try {
+    const lista = await gh(pasta(nome));
+    const arq = Object.fromEntries(lista.map((x) => [x.name, x]));
+    if (!arq['projeto.json'] || !arq['midias.json']) throw new Error('projeto incompleto no repo');
+    const [proj, midias] = await Promise.all([gh(pasta(nome) + '/projeto.json'), gh(pasta(nome) + '/midias.json', { raw: true })]);
+    nuvem.modo = 'nuvem'; nuvem.nome = nome; nuvem.sha = proj.sha; nuvem.shaMidias = arq['midias.json'].sha;
+    nuvem.ultimoLido = b64txt(proj.content);
+    iniciarEditor({ projeto: JSON.parse(nuvem.ultimoLido), midias: JSON.parse(midias) });
+  } catch (e) {
+    $$('erro-projetos').textContent = 'Não abriu: ' + e.message; telaInicio();
+  }
+}
+
+function iniciarEditor(dados) {
+  window.__DADOS = dados;
+  const s = document.createElement('script');
+  s.textContent = $$('principal').textContent;
+  $$('inicio').remove();
+  document.body.appendChild(s);
+  if (nuvem.modo === 'nuvem') ligarNuvem(); else $('bt-baixar').textContent = 'Baixar projeto';
+}
+
+// ---------- salvar no repo e puxar o que o King Bot mudar ----------
+function normal(p) { p.legendas = p.legendas || []; p.sfx = p.sfx || []; p.estilo = p.estilo || {}; p.sobre = p.sobre || []; return p; }
+function marcar(txt) { const e = $$('estado-nuvem'); if (e) e.textContent = txt; }
+async function salvar(forcar) {
+  if (nuvem.salvando) return;
+  fecharPendente();
+  const txt = JSON.stringify(P, null, 2) + '\n';
+  if (!forcar && JSON.stringify(P) === ultimoBaixado) return marcar('salvo ✓');
+  nuvem.salvando = true; marcar('salvando...');
+  const versao = JSON.stringify(P);
+  try {
+    const r = await gh(pasta(nuvem.nome) + '/projeto.json', { method: 'PUT', body: { message: 'edição do Zaza (página)', content: txtb64(txt), sha: nuvem.sha, branch: NUVEM.ramo } });
+    nuvem.sha = r.content.sha; nuvem.ultimoLido = txt; ultimoBaixado = versao;
+    marcar(JSON.stringify(P) === versao ? 'salvo ✓' : 'não salvo');
+  } catch (e) {
+    if (e.status === 409 || e.status === 422) {
+      if (confirm('O King Bot mudou este projeto enquanto você editava. Salvar a TUA versão por cima da dele?')) {
+        const atual = await gh(pasta(nuvem.nome) + '/projeto.json'); nuvem.sha = atual.sha; nuvem.salvando = false; return salvar(true);
+      }
+      marcar('não salvo (conflito)');
+    } else { marcar('não salvo: ' + e.message); aviso('Não salvou no GitHub (' + e.message + ')'); }
+  }
+  nuvem.salvando = false;
+}
+async function puxar() {
+  if (nuvem.salvando || document.hidden) return;
+  try {
+    const lista = await gh(pasta(nuvem.nome));
+    const pj = lista.find((x) => x.name === 'projeto.json'), md = lista.find((x) => x.name === 'midias.json');
+    if (md && md.sha !== nuvem.shaMidias) {
+      if (!sujo()) { aviso('O King Bot mandou mídia nova: recarregando'); setTimeout(() => location.reload(), 900); }
+      else marcar('mídia nova no GitHub: salva e recarrega');
+      return;
+    }
+    if (pj && pj.sha !== nuvem.sha) {
+      if (sujo()) return marcar('o King Bot mudou o projeto: teu salvar vai perguntar');
+      const r = await gh(pasta(nuvem.nome) + '/projeto.json');
+      const txt = b64txt(r.content);
+      nuvem.sha = r.sha; nuvem.ultimoLido = txt;
+      pilhaD.push(JSON.stringify(P)); P = normal(JSON.parse(txt)); ultimoBaixado = JSON.stringify(P);
+      validarSel(); tudo(); marcar('salvo ✓'); aviso('O King Bot atualizou o projeto (Ctrl+Z volta)');
+    }
+  } catch (e) { /* sem rede: tenta de novo na próxima */ }
+}
+function ligarNuvem() {
+  const bt = $('bt-baixar');
+  bt.textContent = 'Salvar';
+  bt.insertAdjacentHTML('beforebegin', '<span id="estado-nuvem">salvo ✓</span>');
+  bt.onclick = () => { clearTimeout(nuvem.timer); salvar(); };
+  // salva sozinho 3 s depois da última mudança
+  let visto = JSON.stringify(P);
+  setInterval(() => {
+    const agora = JSON.stringify(P);
+    if (agora !== visto) { visto = agora; if (agora !== ultimoBaixado) { marcar('não salvo'); clearTimeout(nuvem.timer); nuvem.timer = setTimeout(salvar, 3000); } }
+  }, 700);
+  setInterval(puxar, 10000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) puxar(); });
+}
+
+(function () {
+  const p = new URLSearchParams(location.search).get('p');
+  if (p && tokenSalvo()) { $$('bloco-projetos').hidden = false; abrirNuvem(p); } else telaInicio();
+})();
+</script>

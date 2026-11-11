@@ -1,0 +1,35 @@
+{
+  "_ajuda": "Modelo do roteiro que o motor/fazer.py lê. Tempos em segundos DO BRUTO. Campos com _ são só explicação (pode apagar). Tempos abaixo são EXEMPLO (argentina), não conferidos.",
+  "nome": "argentina_novio",
+  "bruto": "midia/bruto.mp4",
+  "_bruto": "caminho do bruto relativo a este roteiro.json (o editorzin baixa do Drive pra cá)",
+  "palavras": "midia/transcricao_zaza.json",
+  "_palavras": "JSON que o Zaza transcreve no PC dele (faixa 2), com word/start/end (probability opcional). Aqui NUNCA roda whisper.",
+  "palavras_de": 0,
+  "_palavras_de": "se o Zaza transcreveu só um trecho e os tempos começam do 0, ponha aqui onde o trecho começa no bruto (ex.: 155)",
+  "idioma": "es",
+  "empilhar": "ometv",
+  "_empilhar": "ometv = câmeras lado a lado do OmeTV empilhadas (padrão). null pra vídeo comum.",
+  "balao": {"texto": "argentina 🇦🇷", "ate": 3.5},
+  "cortes": [
+    {"de": 182.0, "ate": 184.0, "colar": false, "nota": "cold open: ele dançando + riso dela (riso no frame 0)"},
+    {"de": 173.0, "ate": 186.0, "nota": "hook: ¿Tiene novio? ... Soy yo"},
+    {"de": 191.0, "ate": 212.0, "nota": "idade: ¿Cuántos años tenés? ... ¿22?"},
+    {"de": 250.0, "ate": 260.0, "nota": "Mañana es mi cumpleaños"},
+    {"de": 312.0, "ate": 342.0, "nota": "Instagram até o fecho"}
+  ],
+  "_cortes": "na ordem do vídeo. O rascunho cola começo e fim nas falas (±0,3s); colar:false deixa o corte exato (cena sem fala, riso, dança).",
+  "fecho": "Gracias, mami.",
+  "_fecho": "frase final: o último corte termina 0,15s depois dela (final seco). Se não achar, avisa no conferir.md.",
+  "traducoes": {
+    "¿Tiene novio?": "TEM NAMORADO?",
+    "Soy yo": "SOU EU",
+    "Gracias, mami.": "VALEU, GATA."
+  },
+  "_traducoes": "fala original -> legenda PT. Casa pelo texto (tolera diferença pequena de pontuação/acento). O que não casar sai no conferir.md como 'sem tradução'.",
+  "legenda_post": "ela pediu um namorado e eu me ofereci 🇦🇷😭 #ometv #omegle #humor #viral #explore",
+  "regras": {"alvo": [20, 30], "max_sem_fala": 4},
+  "_regras": "o fazer.py confere: duração no alvo, nada de max_sem_fala segundos sem legenda nova, final seco no fecho.",
+  "sfx": [],
+  "_sfx": "opcional, igual ao projeto.json: [{\"midia\": \"vineboom\", \"em\": 1.07}] com tempo NO VÍDEO FINAL (a mídia tem que estar em midia do projeto). Mais fácil: o editorzin põe depois da prévia."
+}

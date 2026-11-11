@@ -1,0 +1,64 @@
+/* Estilo das legendas e do balão. O MESMO CSS é usado no render (motor/render.py)
+   e no editor (editor.html): o que aparece no editor é o que sai no vídeo.
+   Medidas em px de um quadro 1080x1920. As variáveis --* vêm do projeto.json. */
+
+.quadro {
+  position: relative;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  font-family: "Montserrat", "Noto Color Emoji", sans-serif;
+}
+
+/* Legenda dupla: linha EN termina logo acima de --leg-y e a PT começa logo abaixo
+   (assim a divisória fica sempre no mesmo lugar, com 1 ou 2 linhas em cada língua) */
+.legenda { position: absolute; inset: 0; pointer-events: none; }
+.legenda .en, .legenda .pt {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--leg-largura, 880px);
+  text-align: center;
+  line-height: 1.18;
+  text-wrap: balance;
+  paint-order: stroke fill;
+  font-synthesis: none; /* fonte de peso único não ganha negrito falso */
+}
+.legenda .en {
+  bottom: calc(100% - var(--leg-y, 960px) + var(--leg-espaco, 4px));
+  font-family: var(--fonte-en, "Montserrat"), "Noto Color Emoji", sans-serif;
+  color: var(--cor-en, #ffffff);
+  font-size: var(--tam-en, 40px);
+  font-weight: 700;
+  -webkit-text-stroke: var(--contorno-en, 7px) #000;
+}
+.legenda .pt {
+  top: calc(var(--leg-y, 960px) + var(--leg-espaco, 4px));
+  font-family: var(--fonte-pt, "Montserrat"), "Noto Color Emoji", sans-serif;
+  color: var(--cor-pt, #ffe81a);
+  font-size: var(--tam-pt, 48px);
+  font-weight: 900;
+  text-transform: uppercase;
+  -webkit-text-stroke: var(--contorno-pt, 9px) #000;
+}
+
+/* Balão (título fixo no topo) */
+.balao {
+  position: absolute;
+  left: 50%;
+  top: var(--balao-y, 40px);
+  transform: translateX(-50%);
+  max-width: var(--balao-largura, 960px);
+  font-family: var(--balao-fonte, "Montserrat"), "Noto Color Emoji", sans-serif;
+  font-synthesis: none;
+  background: var(--balao-fundo, #ffffff);
+  color: var(--balao-cor, #000000);
+  font-size: var(--balao-tam, 40px);
+  font-weight: 600;
+  padding: 18px 30px;
+  border-radius: 26px;
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.balao.quebra { white-space: normal; }
