@@ -59,7 +59,7 @@ def proxy_video(cam, faixas, faixas_audio, pasta, nome, layout=None):
     for n, (a, b) in enumerate(faixas):
         out = os.path.join(pasta, f"{nome}_{n}.mp4")
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", cam]
-        vf = "scale=360:640:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2,fps=30"
+        vf = "scale=640:640:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2,fps=30"
         if layout:
             vf = empilhar_filtro(layout, 360, 640, "p") + ",fps=30"
         if info["audios"] == 0:

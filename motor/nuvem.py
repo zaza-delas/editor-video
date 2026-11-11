@@ -110,7 +110,7 @@ def agora():
         return datetime.datetime.now()
 
 
-def subir(caminho, folga, sem_midia):
+def subir(caminho, folga, sem_midia, so_midia=False):
     from render import ler_projeto
     from editor import montar_dados, limpo
     p = ler_projeto(caminho)
@@ -132,6 +132,10 @@ def subir(caminho, folga, sem_midia):
         log(f"mídia leve: {os.path.getsize(os.path.join(dest, 'midias.json')) / 1e6:.1f} MB")
     else:
         log("mídia leve: igual, não refiz")
+    if so_midia:  # só a cópia leve: não mexe na edição que o Zaza está fazendo no site
+        enviar(repo, f"King Bot: cópia leve de {nome}")
+        print(f"{SITE}?p={nome}")
+        return
     with open(os.path.join(dest, "projeto.json"), "w", encoding="utf-8") as f:
         f.write(json.dumps(limpo(p), ensure_ascii=False, indent=2) + "\n")
     # índice que a página lista (mais novo primeiro)
@@ -298,12 +302,13 @@ def main():
     ap.add_argument("projeto", nargs="?")
     ap.add_argument("--folga", type=float, default=1.5)
     ap.add_argument("--sem-midia", action="store_true")
+    ap.add_argument("--so-midia", action="store_true", help="subir: só a cópia leve, sem mexer no projeto.json do GitHub")
     ap.add_argument("--pasta", help="baixar <nome>: pasta local do projeto (padrão projetos/<nome>)")
     a = ap.parse_args()
     if a.acao in ("subir", "baixar") and not a.projeto:
         ap.error("faltou o projeto.json")
     if a.acao == "subir":
-        subir(a.projeto, a.folga, a.sem_midia)
+        subir(a.projeto, a.folga, a.sem_midia, a.so_midia)
     elif a.acao == "baixar":
         baixar(a.projeto, a.pasta)
     elif a.acao == "lista":

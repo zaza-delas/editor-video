@@ -53,7 +53,7 @@ label { display: grid; gap: 4px; color: var(--fraco); font-size: 13px; min-width
   .app { grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr); grid-template-areas: "topo topo" "player props" "player sons" "tl tl"; }
 }
 @media (max-width: 640px) {
-  .app .tela { max-width: max(180px, calc(48vh * 9 / 16)); }
+  .app .tela { max-width: max(180px, calc(48vh * var(--arn, 0.5625))); }
   .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "topo" "player" "tl" "props" "sons"; }
 }
 .caixa { background: var(--painel); border-radius: 8px; min-width: 0; }
@@ -72,7 +72,7 @@ label { display: grid; gap: 4px; color: var(--fraco); font-size: 13px; min-width
 .item-som .add { min-height: 30px; padding: 2px 10px; }
 
 .player { grid-area: player; padding: 8px; display: grid; gap: 8px; justify-items: center; align-content: start; }
-.tela { position: relative; width: 100%; max-width: max(200px, calc(56vh * 9 / 16)); aspect-ratio: 9 / 16; background: #000; overflow: hidden; }
+.tela { position: relative; width: 100%; max-width: max(200px, calc(56vh * var(--arn, 0.5625))); aspect-ratio: var(--ar, 9 / 16); background: #000; overflow: hidden; }
 .tela canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .tela .camada { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; transform-origin: 0 0; pointer-events: none; }
 .transporte { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; width: 100%; max-width: 520px; }
@@ -135,7 +135,7 @@ button.icone.on { color: var(--destaque); background: var(--painel2); }
 .cabeca::before { content: ""; position: absolute; top: 0; left: -5px; border: 6px solid transparent; border-top: 8px solid #fff; }
 .guia { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--destaque); z-index: 4; pointer-events: none; display: none; }
 .player.cheia { position: fixed; inset: 0; z-index: 40; background: #000; border-radius: 0; align-content: center; padding: 12px; }
-.player.cheia .tela { max-width: min(100vw, calc((100vh - 80px) * 9 / 16)); }
+.player.cheia .tela { max-width: min(100vw, calc((100vh - 80px) * var(--arn, 0.5625))); }
 .player.cheia .transporte { max-width: 640px; }
 .pista.h-video.alvo { outline: 2px dashed #ffffffaa; outline-offset: -1px; border-radius: 5px; }
 .aviso { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--texto); color: var(--fundo); padding: 10px 16px; border-radius: 8px; font-weight: 500; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
@@ -528,6 +528,27 @@ function proxyT(nome, tf) {
 
 // ---------- desenho do quadro ----------
 const cv = $('cv'), cx = cv.getContext('2d');
+// formato do vídeo final: vertical 1080x1920 (Reels/Shorts) ou horizontal 1920x1080 (YouTube)
+const FW = () => (P.formato && P.formato.largura) || 1080, FH = () => (P.formato && P.formato.altura) || 1920;
+const FORMATOS = { vertical: [1080, 1920, 'Vertical 9:16 (Reels, Shorts, TikTok)'], horizontal: [1920, 1080, 'Horizontal 16:9 (YouTube)'] };
+const formatoAtual = () => (FW() > FH() ? 'horizontal' : 'vertical');
+let formatoVisto = '';
+function aplicarFormato() {
+  const W = FW(), H = FH(), k = W + 'x' + H; if (k === formatoVisto) return; formatoVisto = k;
+  const r = document.documentElement.style; r.setProperty('--ar', `${W} / ${H}`); r.setProperty('--arn', String(W / H));
+  cv.width = Math.round(W / 2); cv.height = Math.round(H / 2);
+  const cm = document.querySelector('.camada'); cm.style.width = W + 'px'; cm.style.height = H + 'px';
+  $('quadro').style.width = W + 'px'; $('quadro').style.height = H + 'px';
+  textoAtual = null; requestAnimationFrame(() => escalar());
+}
+function trocarFormato(nome) { // muda o quadro e põe a legenda num lugar que faz sentido no formato novo
+  const f = FORMATOS[nome]; if (!f || nome === formatoAtual()) return;
+  P.formato = { ...(P.formato || {}), largura: f[0], altura: f[1] };
+  const e = P.estilo.legenda = P.estilo.legenda || {};
+  if (nome === 'horizontal') { e.y = 900; e.largura = 1500; } else { delete e.y; delete e.largura; }
+  for (const l of P.legendas) if (l.estilo && l.estilo.y != null) { delete l.estilo.y; if (!Object.keys(l.estilo).length) delete l.estilo; }
+  for (const o of P.sobre) { if (o.largura > f[0]) o.largura = f[0]; if (o.y != null && o.y > f[1] - 50) delete o.y; }
+}
 function desenharMidia(el, encaixe, zoom) {
   const W = cv.width, H = cv.height, iw = el.videoWidth || el.naturalWidth, ih = el.videoHeight || el.naturalHeight;
   if (!iw) return;
@@ -594,7 +615,7 @@ function quadro() {
   requestAnimationFrame(quadro);
 }
 function desenharSobre(comSom) {
-  const k = cv.width / 1080, ativos = new Set();
+  const k = cv.width / FW(), ativos = new Set();
   const lista = P.sobre.filter((o) => !o.desativado && o.em <= T && T < o.em + durSobre(o)).sort((a, b) => (a.pista || 0) - (b.pista || 0));
   for (const o of lista) {
     const m = M[o.midia] || {}, el = elsS[o.midia]; if (!el) continue;
@@ -605,7 +626,7 @@ function desenharSobre(comSom) {
       if (tocando && el.paused) el.play().catch(() => {}); if (!tocando && !el.paused) el.pause();
     }
     const iw = el.videoWidth || el.naturalWidth, ih = el.videoHeight || el.naturalHeight; if (!iw) continue;
-    const w = (o.largura || 1080) * k, h = w * ih / iw, x = (o.x || 0) * k, y = o.y == null ? (cv.height - h) / 2 : o.y * k;
+    const w = (o.largura || FW()) * k, h = w * ih / iw, x = (o.x || 0) * k, y = o.y == null ? (cv.height - h) / 2 : o.y * k;
     cx.drawImage(el, x, y, w, h);
   }
   for (const e of Object.values(elsS)) if (e instanceof HTMLVideoElement && !ativos.has(e) && !e.paused) e.pause();
@@ -618,7 +639,7 @@ function tocar() {
 }
 function parar() { tocando = false; pararSons(); Object.values(els).concat(Object.values(elsS)).forEach((e) => e.pause && e.pause()); $('bt-play').innerHTML = '<svg><use href="#i-play"/></svg>'; }
 function irPara(t) { const L = linha(); T = Math.min(Math.max(0, t), L.total); if (tocando) { T0 = T; relogio0 = performance.now(); agendarTudo(); } }
-function escalar() { document.querySelector('.camada').style.transform = `scale(${$('tela').clientWidth / 1080})`; }
+function escalar() { document.querySelector('.camada').style.transform = `scale(${$('tela').clientWidth / FW()})`; }
 new ResizeObserver(escalar).observe($('tela'));
 
 // ---------- timeline ----------
@@ -833,7 +854,7 @@ function aplicarArraste(dt) {
       P.legendas = P.legendas.filter((l) => !levaL.includes(l)); P.sfx = P.sfx.filter((x) => !levaS.includes(x));
       const t = P.trechos.splice(arr.i, 1)[0];
       remapear(B.trechos, P.trechos, (k) => (k < arr.i ? k : k === arr.i ? -1 : k - 1));
-      const tot = linha().total, o = { midia: t.midia, em: r3(Math.min(Math.max(comIma(x0.ini + dt), 0), Math.max(0, tot - x0.dur))), largura: 1080 };
+      const tot = linha().total, o = { midia: t.midia, em: r3(Math.min(Math.max(comIma(x0.ini + dt), 0), Math.max(0, tot - x0.dur))), largura: FW() };
       const desl = o.em - x0.ini;
       for (const l of levaL) { const n = { ...l, de: r3(l.de + desl), ate: r3(Math.min(l.ate + desl, tot)) }; if (n.ate - n.de >= 0.05) { acomodar('legenda', n); P.legendas.push(n); } }
       for (const x of levaS) { const n = { ...x, em: r3(x.em + desl) }; if (n.em < tot) { acomodar('sfx', n); P.sfx.push(n); } }
@@ -968,7 +989,9 @@ async function importarArquivos(lista) {
     if (!tipo) { aviso(f.name + ': não é vídeo, áudio nem imagem'); continue; }
     const nome = nomeLivre(f.name), arq = nome + (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
     const antes = JSON.stringify(P);
-    await registrarMidia(nome, URL.createObjectURL(f), tipo, 'midia/' + arq);
+    const url = URL.createObjectURL(f);
+    await registrarMidia(nome, url, tipo, 'midia/' + arq);
+    if (tipo === 'video' && M[nome] && M[nome].duracao && !(await new Promise((ok) => { const e = document.createElement('video'); e.muted = true; e.onloadedmetadata = () => ok(e.videoWidth > 0); e.onerror = () => ok(false); e.src = url; }))) setTimeout(() => aviso(f.name + ': vídeo H.265, este navegador só toca o som. Me avisa no chat que eu faço a cópia leve'), 2800);
     confirmar(antes);
     novos.push({ nome, tipo });
     if (window.kbEnviarMidia) window.kbEnviarMidia(f, 'midia/' + arq, nome);
@@ -1027,7 +1050,7 @@ function addSfx(nome) {
 function addSobre(nome) {
   const m = M[nome] || {};
   mudar(() => {
-    const novo = { midia: nome, em: r3(q(T)), largura: 1080 };
+    const novo = { midia: nome, em: r3(q(T)), largura: FW() };
     if (m.tipo === 'imagem') novo.duracao = 2;
     else { const seg = (m.mapa || [])[0] || { a: 0, b: 3 }; novo.de = r3(seg.a); novo.ate = r3(Math.min(seg.b, seg.a + 3)); }
     acomodar('sobre', novo); P.sobre.push(novo); sel = { tipo: 'sobre', i: P.sobre.indexOf(novo) }; tudo();
@@ -1084,12 +1107,14 @@ function props() {
   if (!sel) {
     const e = P.estilo.legenda || {}, b = P.estilo.balao || {};
     const selF = (rot, chave, atual) => `<label>${rot}<select data-c="${chave}">${FONTES.map((f) => `<option style="font-family:'${f}'" ${f === (atual || 'Montserrat') ? 'selected' : ''}>${f}</option>`).join('')}</select></label>`;
-    el.innerHTML = `<h2>Estilo das legendas</h2>
+    el.innerHTML = `<h2>Formato do vídeo</h2>
+      <label><select data-c="formato">${Object.entries(FORMATOS).map(([k, f]) => `<option value="${k}" ${k === formatoAtual() ? 'selected' : ''}>${f[2]}</option>`).join('')}</select></label>
+      <h2>Estilo das legendas</h2>
       <div class="grade2">${selF('Fonte do inglês', 'g:legenda:fonte_en', e.fonte_en)}${selF('Fonte do português', 'g:legenda:fonte_pt', e.fonte_pt)}${P.balao ? selF('Fonte do balão', 'g:balao:fonte', b.fonte) : ''}</div>
       ${barra('Inglês', 'g:legenda:tam_en', e.tam_en ?? 40, 24, 90, 1, (v) => v + 'px')}
       ${barra('Português', 'g:legenda:tam_pt', e.tam_pt ?? 48, 24, 100, 1, (v) => v + 'px')}
-      ${barra('Altura', 'g:legenda:y', e.y ?? 960, 300, 1700, 5, (v) => v)}
-      ${barra('Largura', 'g:legenda:largura', e.largura ?? 880, 500, 1040, 10, (v) => v)}
+      ${barra('Altura', 'g:legenda:y', e.y ?? 960, 100, FH() - 60, 5, (v) => v)}
+      ${barra('Largura', 'g:legenda:largura', e.largura ?? 880, 300, FW() - 40, 10, (v) => v)}
       ${P.balao ? barra('Balão', 'g:balao:tam', b.tam ?? 40, 24, 80, 1, (v) => v + 'px') + barra('Altura balão', 'g:balao:y', b.y ?? 40, 0, 600, 5, (v) => v) : ''}
       <div class="grade2"><label>Cor do inglês<input type="color" data-c="g:legenda:cor_en" value="${e.cor_en || '#ffffff'}"></label>
       <label>Cor do português<input type="color" data-c="g:legenda:cor_pt" value="${e.cor_pt || '#ffe81a'}"></label></div>`;
@@ -1101,7 +1126,7 @@ function props() {
     el.innerHTML = `<h2>Legenda</h2>${chkOff(g, 'Desativada')}
       <label>Inglês<textarea data-c="en">${esc(g.en)}</textarea></label>
       <label>Português<textarea data-c="pt">${esc(g.pt)}</textarea></label>
-      ${barra('Altura na tela', 'y', (g.estilo || {}).y ?? ((P.estilo.legenda || {}).y ?? 960), 100, 1800, 5, (v) => v)}
+      ${barra('Altura na tela', 'y', (g.estilo || {}).y ?? ((P.estilo.legenda || {}).y ?? 960), 60, FH() - 60, 5, (v) => v)}
       <div class="grade2"><label>Começa (s)<input type="number" step="0.01" data-c="de" value="${n3(g.de)}"></label><label>Termina (s)<input type="number" step="0.01" data-c="ate" value="${n3(g.ate)}"></label></div>`;
   } else if (sel.tipo === 'trecho') {
     const x = linha().tr[sel.i], t = x.t, m = M[t.midia] || {};
@@ -1124,9 +1149,9 @@ function props() {
   } else if (sel.tipo === 'sobre') {
     const o = P.sobre[sel.i], m = M[o.midia] || {};
     el.innerHTML = `<h2>Por cima: ${esc(o.midia)}</h2>${chkOff(o, 'Desativado')}
-      ${barra('Tamanho', 'largura', Math.round(o.largura || 1080), 100, 1080, 10, (v) => v)}
-      ${barra('Esquerda', 'x', Math.round(o.x || 0), -540, 1080, 5, (v) => v)}
-      ${barra('Altura', 'ytopo', Math.round(o.y ?? -1), -1, 1900, 5, (v) => (v < 0 ? 'centro' : v))}
+      ${barra('Tamanho', 'largura', Math.round(o.largura || FW()), 100, FW(), 10, (v) => v)}
+      ${barra('Esquerda', 'x', Math.round(o.x || 0), -Math.round(FW() / 2), FW(), 5, (v) => v)}
+      ${barra('Altura', 'ytopo', Math.round(o.y ?? -1), -1, FH() - 20, 5, (v) => (v < 0 ? 'centro' : v))}
       ${m.tipo === 'video' ? barra('Volume', 'volume', Math.round((o.volume ?? 1) * 100), 0, 200, 1, pct) + `<label class="alternar"><input type="checkbox" data-c="mudo" ${o.mudo ? 'checked' : ''}> Sem som</label>` + `${barra('Reduzir ruído', 'reduzir_ruido', Math.round((o.reduzir_ruido || 0) * 100), 0, 100, 5, (v) => (v ? v + '%' : 'não'))}
       <label class="alternar"><input type="checkbox" data-c="realcar_voz" ${o.realcar_voz ? 'checked' : ''}> Realçar voz</label>` : ''}
       <div class="grade2"><label>Entra em (s)<input type="number" step="0.01" data-c="em" value="${n3(o.em)}"></label>
@@ -1139,6 +1164,7 @@ function props() {
 }
 function alvo() { return sel && (sel.tipo === 'legenda' ? P.legendas[sel.i] : sel.tipo === 'sfx' ? P.sfx[sel.i] : sel.tipo === 'sobre' ? P.sobre[sel.i] : sel.tipo === 'balao' ? P.balao : sel.tipo === 'trecho' ? P.trechos[sel.i] : null); }
 function aplicar(c, v) {
+  if (c === 'formato') { trocarFormato(v); textoAtual = null; return; }
   if (c.startsWith('g:')) { const [, g, k] = c.split(':'); P.estilo[g] = P.estilo[g] || {}; P.estilo[g][k] = v; textoAtual = null; return; }
   if (sel && multi.length > 1) {
     const lista = LISTA[sel.tipo]();
@@ -1230,7 +1256,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowRight') { parar(); irPara(T + 1 / FPS); }
 });
 
-function tudo() { textoAtual = null; desenharTimeline(); props(); sons(); botoesHist(); guardar(); }
+function tudo() { aplicarFormato(); textoAtual = null; desenharTimeline(); props(); sons(); botoesHist(); guardar(); }
 
 // ---------- edição guardada sozinha (10/11: o Zaza salvou a página e a edição se perdeu) ----------
 // Guarda no navegador a cada mudança; ao reabrir a mesma página, volta onde parou.
@@ -1291,6 +1317,9 @@ requestAnimationFrame(() => { const L = linha(); pxs = Math.min(300, Math.max(20
       <label for="novo-nome">Novo projeto</label>
       <input type="text" id="novo-nome" placeholder="nome (ex.: chileno_v1)" autocomplete="off" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:15px">
       <div class="linha"><input type="file" id="novo-video" accept="video/*"></div>
+      <div class="linha"><select id="novo-formato" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:15px">
+        <option value="vertical">Vertical 9:16 (Reels, Shorts, TikTok)</option><option value="horizontal">Horizontal 16:9 (YouTube)</option></select></div>
+      <div id="novo-h265" class="erro" hidden></div>
       <div id="novo-grande" class="fraco" hidden style="margin-top:8px">Vídeo grande: ele não sobe, abre direto do teu PC e o projeto salva no GitHub. Pra eu renderizar, cola o link do Drive dele (compartilhado com "qualquer pessoa com o link"):
         <input type="text" id="novo-drive" placeholder="https://drive.google.com/file/d/..." autocomplete="off" style="width:100%;margin-top:6px;padding:9px 12px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:14px"></div>
       <div class="linha"><button class="principal" id="bt-novo">Criar</button><span class="fraco" id="novo-estado"></span></div>
@@ -1335,6 +1364,12 @@ function enviarArquivo(caminho, conteudoB64, msg, progresso, sha) { // XHR pra t
     x.send(JSON.stringify({ message: msg, content: conteudoB64, branch: NUVEM.ramo, ...(sha ? { sha } : {}) }));
   });
 }
+// vídeo H.265 (HEVC): muito Chrome toca só o som, sem imagem (videoWidth fica 0)
+function temImagem(url) {
+  return new Promise((ok) => { const e = document.createElement('video'); e.muted = true; e.preload = 'metadata'; e.onloadedmetadata = () => ok(e.videoWidth > 0); e.onerror = () => ok(false); e.src = url; setTimeout(() => ok(true), 8000); });
+}
+const MSG_H265 = 'Esse vídeo está em H.265 (HEVC) e este navegador não mostra a imagem dele, só o som.';
+let semImagem = false; // algum vídeo do PC aberto sem imagem: quando a cópia leve chegar, recarrega sozinho
 function duracaoMidia(url, tipo) {
   return new Promise((ok) => { if (tipo === 'imagem') return ok(0); const e = document.createElement(tipo === 'audio' ? 'audio' : 'video'); e.preload = 'metadata'; e.onloadedmetadata = () => ok(e.duration || 0); e.onerror = () => ok(0); e.src = url; });
 }
@@ -1416,7 +1451,11 @@ async function abrirNuvem(nome) {
     for (const [n, c] of Object.entries(projeto.midia || {})) {
       if (!c || typeof c !== 'object' || !c.no_pc) continue;
       const url = locais[nome + '/' + c.arquivo]; // escolhido agora há pouco (projeto novo, Mídia)
-      if (url) { const dur = await duracaoMidia(url, 'video'); midias[n] = { tipo: 'video', src: url, duracao: dur, local: true, mapa: [{ a: 0, b: dur, o: 0 }] }; }
+      if (url) {
+        const dur = await duracaoMidia(url, 'video'), img = await temImagem(url);
+        if (!img) semImagem = true;
+        if (img || !midias[n]) midias[n] = { tipo: 'video', src: url, duracao: dur, local: true, mapa: [{ a: 0, b: dur, o: 0 }] };
+      }
       else noPc.push([n, c]);
     }
     let driveMudou = false;
@@ -1447,6 +1486,7 @@ function pedirDoPc(nome, projeto, noPc, midias) {
     info.textContent = 'Esse vídeo fica no teu PC (é grande demais pro GitHub). Abre ele de novo pra editar:';
     L.appendChild(info);
     const estado = {}; let driveMudou = false;
+    const leves = Object.fromEntries(noPc.filter(([n]) => midias[n]).map(([n]) => [n, midias[n]]));
     const bt = document.createElement('button'); bt.className = 'principal'; bt.textContent = 'Abrir o projeto';
     const nota = document.createElement('p'); nota.className = 'fraco';
     function conferir() {
@@ -1468,9 +1508,13 @@ function pedirDoPc(nome, projeto, noPc, midias) {
         const url = URL.createObjectURL(r.file), dur = await duracaoMidia(url, 'video');
         if (!dur) { st.textContent = 'não consegui ler esse vídeo'; return; }
         locais[k] = url; if (r.handle) { atalhos[k] = r.handle; idb.por(k, r.handle); }
-        midias[n] = { tipo: 'video', src: url, duracao: dur, local: true, mapa: [{ a: 0, b: dur, o: 0 }] };
+        const img = await temImagem(url);
+        if (!img && !leves[n]) semImagem = true;
+        if (img || !leves[n]) midias[n] = { tipo: 'video', src: url, duracao: dur, local: true, mapa: [{ a: 0, b: dur, o: 0 }] };
+        else midias[n] = leves[n]; // sem imagem aqui: fica a cópia leve, que o navegador lê
         estado[n] = true; b.textContent = 'Trocar';
         st.textContent = r.file.size === c.no_pc.tamanho ? '✓ ' + r.file.name : `⚠ ${r.file.name} tem ${tamTxt(r.file.size)}, o do projeto tinha ${tamTxt(c.no_pc.tamanho)}. Confere se é o mesmo.`;
+        if (!img) st.textContent += leves[n] ? ' · H.265: a imagem vem da cópia leve' : ' · ' + MSG_H265 + ' Me avisa no chat que eu faço a cópia leve.';
         conferir();
       };
       b.onclick = async () => {
@@ -1550,7 +1594,8 @@ $$('bt-novo').onclick = async () => {
     locais[nome + '/' + caminho] = url;
     const k = nome + '/' + caminho; if (novoAtalho && novoAtalho.arq === f) { atalhos[k] = novoAtalho.handle; await idb.por(k, novoAtalho.handle); }
     st('criando o projeto...');
-    const projeto = { nome, formato: { largura: 1080, altura: 1920, fps: 30, lufs: -14 }, midia: { bruto: grande ? { arquivo: caminho, no_pc: { nome: f.name, tamanho: f.size }, ...(drive ? { drive } : {}) } : caminho },
+    const horiz = $$('novo-formato').value === 'horizontal';
+    const projeto = { nome, formato: { largura: horiz ? 1920 : 1080, altura: horiz ? 1080 : 1920, fps: 30, lufs: -14 }, ...(horiz ? { estilo: { legenda: { y: 900, largura: 1500 } } } : {}), midia: { bruto: grande ? { arquivo: caminho, no_pc: { nome: f.name, tamanho: f.size }, ...(drive ? { drive } : {}) } : caminho },
       trechos: [{ midia: 'bruto', de: 0, ate: Math.round(dur * 1000) / 1000 }], legendas: [] };
     await gh(pasta(nome) + '/projeto.json', { method: 'PUT', body: { message: 'projeto novo: ' + nome, content: txtb64(JSON.stringify(projeto, null, 2) + '\n'), branch: NUVEM.ramo } });
     let ind = [], shaInd;
@@ -1566,7 +1611,11 @@ $$('bt-novo').onclick = async () => {
 
 // escolher o vídeo do projeto novo: no Chrome guarda o atalho (reabre com um clique depois)
 let novoAtalho = null;
-function marcouVideo(f) { $$('novo-grande').hidden = !(f && f.size > LIMITE_MB * 1e6); }
+async function marcouVideo(f) {
+  $$('novo-grande').hidden = !(f && f.size > LIMITE_MB * 1e6);
+  const av = $$('novo-h265'); av.hidden = true;
+  if (f && !(await temImagem(URL.createObjectURL(f)))) { av.hidden = false; av.textContent = MSG_H265 + ' Dá pra criar assim, mas a imagem só aparece depois que eu fizer a cópia leve: me avisa no chat (com o link do Drive, se for grande).'; }
+}
 $$('novo-video').onchange = (e) => { novoAtalho = null; marcouVideo(e.target.files[0]); };
 $$('novo-video').onclick = async (e) => {
   if (!window.showOpenFilePicker) return;
@@ -1608,7 +1657,8 @@ async function puxar() {
     const pj = lista.find((x) => x.name === 'projeto.json'), md = lista.find((x) => x.name === 'midias.json');
     if (md && md.sha !== nuvem.shaMidias && !nuvem.enviando) {
       const temPc = Object.values(P.midia || {}).some((c) => c && c.no_pc);
-      if (temPc) { nuvem.shaMidias = md.sha; marcar('mídia nova no GitHub: F5 quando quiser'); }
+      if (temPc && semImagem && !sujo()) { aviso('A cópia leve chegou: recarregando'); setTimeout(() => location.reload(), 900); }
+      else if (temPc) { nuvem.shaMidias = md.sha; marcar(semImagem ? 'cópia leve chegou: aperta F5' : 'mídia nova no GitHub: F5 quando quiser'); }
       else if (!sujo()) { aviso('O King Bot mandou mídia nova: recarregando'); setTimeout(() => location.reload(), 900); }
       else marcar('mídia nova no GitHub: salva e recarrega');
       return;
@@ -1644,6 +1694,6 @@ function ligarNuvem() {
 })();
 </script>
 
-<!-- editor v7.17 -->
+<!-- editor v7.18 -->
 </body>
 </html>

@@ -37,6 +37,9 @@
       <label for="novo-nome">Novo projeto</label>
       <input type="text" id="novo-nome" placeholder="nome (ex.: chileno_v1)" autocomplete="off" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:15px">
       <div class="linha"><input type="file" id="novo-video" accept="video/*"></div>
+      <div class="linha"><select id="novo-formato" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:15px">
+        <option value="vertical">Vertical 9:16 (Reels, Shorts, TikTok)</option><option value="horizontal">Horizontal 16:9 (YouTube)</option></select></div>
+      <div id="novo-h265" class="erro" hidden></div>
       <div id="novo-grande" class="fraco" hidden style="margin-top:8px">Vídeo grande: ele não sobe, abre direto do teu PC e o projeto salva no GitHub. Pra eu renderizar, cola o link do Drive dele (compartilhado com "qualquer pessoa com o link"):
         <input type="text" id="novo-drive" placeholder="https://drive.google.com/file/d/..." autocomplete="off" style="width:100%;margin-top:6px;padding:9px 12px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:14px"></div>
       <div class="linha"><button class="principal" id="bt-novo">Criar</button><span class="fraco" id="novo-estado"></span></div>
@@ -81,6 +84,12 @@ function enviarArquivo(caminho, conteudoB64, msg, progresso, sha) { // XHR pra t
     x.send(JSON.stringify({ message: msg, content: conteudoB64, branch: NUVEM.ramo, ...(sha ? { sha } : {}) }));
   });
 }
+// vídeo H.265 (HEVC): muito Chrome toca só o som, sem imagem (videoWidth fica 0)
+function temImagem(url) {
+  return new Promise((ok) => { const e = document.createElement('video'); e.muted = true; e.preload = 'metadata'; e.onloadedmetadata = () => ok(e.videoWidth > 0); e.onerror = () => ok(false); e.src = url; setTimeout(() => ok(true), 8000); });
+}
+const MSG_H265 = 'Esse vídeo está em H.265 (HEVC) e este navegador não mostra a imagem dele, só o som.';
+let semImagem = false; // algum vídeo do PC aberto sem imagem: quando a cópia leve chegar, recarrega sozinho
 function duracaoMidia(url, tipo) {
   return new Promise((ok) => { if (tipo === 'imagem') return ok(0); const e = document.createElement(tipo === 'audio' ? 'audio' : 'video'); e.preload = 'metadata'; e.onloadedmetadata = () => ok(e.duration || 0); e.onerror = () => ok(0); e.src = url; });
 }
@@ -162,7 +171,11 @@ async function abrirNuvem(nome) {
     for (const [n, c] of Object.entries(projeto.midia || {})) {
       if (!c || typeof c !== 'object' || !c.no_pc) continue;
       const url = locais[nome + '/' + c.arquivo]; // escolhido agora há pouco (projeto novo, Mídia)
-      if (url) { const dur = await duracaoMidia(url, 'video'); midias[n] = { tipo: 'video', src: url, duracao: dur, local: true, mapa: [{ a: 0, b: dur, o: 0 }] }; }
+      if (url) {
+        const dur = await duracaoMidia(url, 'video'), img = await temImagem(url);
+        if (!img) semImagem = true;
+        if (img || !midias[n]) midias[n] = { tipo: 'video', src: url, duracao: dur, local: true, mapa: [{ a: 0, b: dur, o: 0 }] };
+      }
       else noPc.push([n, c]);
     }
     let driveMudou = false;
@@ -193,6 +206,7 @@ function pedirDoPc(nome, projeto, noPc, midias) {
     info.textContent = 'Esse vídeo fica no teu PC (é grande demais pro GitHub). Abre ele de novo pra editar:';
     L.appendChild(info);
     const estado = {}; let driveMudou = false;
+    const leves = Object.fromEntries(noPc.filter(([n]) => midias[n]).map(([n]) => [n, midias[n]]));
     const bt = document.createElement('button'); bt.className = 'principal'; bt.textContent = 'Abrir o projeto';
     const nota = document.createElement('p'); nota.className = 'fraco';
     function conferir() {
@@ -214,9 +228,13 @@ function pedirDoPc(nome, projeto, noPc, midias) {
         const url = URL.createObjectURL(r.file), dur = await duracaoMidia(url, 'video');
         if (!dur) { st.textContent = 'não consegui ler esse vídeo'; return; }
         locais[k] = url; if (r.handle) { atalhos[k] = r.handle; idb.por(k, r.handle); }
-        midias[n] = { tipo: 'video', src: url, duracao: dur, local: true, mapa: [{ a: 0, b: dur, o: 0 }] };
+        const img = await temImagem(url);
+        if (!img && !leves[n]) semImagem = true;
+        if (img || !leves[n]) midias[n] = { tipo: 'video', src: url, duracao: dur, local: true, mapa: [{ a: 0, b: dur, o: 0 }] };
+        else midias[n] = leves[n]; // sem imagem aqui: fica a cópia leve, que o navegador lê
         estado[n] = true; b.textContent = 'Trocar';
         st.textContent = r.file.size === c.no_pc.tamanho ? '✓ ' + r.file.name : `⚠ ${r.file.name} tem ${tamTxt(r.file.size)}, o do projeto tinha ${tamTxt(c.no_pc.tamanho)}. Confere se é o mesmo.`;
+        if (!img) st.textContent += leves[n] ? ' · H.265: a imagem vem da cópia leve' : ' · ' + MSG_H265 + ' Me avisa no chat que eu faço a cópia leve.';
         conferir();
       };
       b.onclick = async () => {
@@ -296,7 +314,8 @@ $$('bt-novo').onclick = async () => {
     locais[nome + '/' + caminho] = url;
     const k = nome + '/' + caminho; if (novoAtalho && novoAtalho.arq === f) { atalhos[k] = novoAtalho.handle; await idb.por(k, novoAtalho.handle); }
     st('criando o projeto...');
-    const projeto = { nome, formato: { largura: 1080, altura: 1920, fps: 30, lufs: -14 }, midia: { bruto: grande ? { arquivo: caminho, no_pc: { nome: f.name, tamanho: f.size }, ...(drive ? { drive } : {}) } : caminho },
+    const horiz = $$('novo-formato').value === 'horizontal';
+    const projeto = { nome, formato: { largura: horiz ? 1920 : 1080, altura: horiz ? 1080 : 1920, fps: 30, lufs: -14 }, ...(horiz ? { estilo: { legenda: { y: 900, largura: 1500 } } } : {}), midia: { bruto: grande ? { arquivo: caminho, no_pc: { nome: f.name, tamanho: f.size }, ...(drive ? { drive } : {}) } : caminho },
       trechos: [{ midia: 'bruto', de: 0, ate: Math.round(dur * 1000) / 1000 }], legendas: [] };
     await gh(pasta(nome) + '/projeto.json', { method: 'PUT', body: { message: 'projeto novo: ' + nome, content: txtb64(JSON.stringify(projeto, null, 2) + '\n'), branch: NUVEM.ramo } });
     let ind = [], shaInd;
@@ -312,7 +331,11 @@ $$('bt-novo').onclick = async () => {
 
 // escolher o vídeo do projeto novo: no Chrome guarda o atalho (reabre com um clique depois)
 let novoAtalho = null;
-function marcouVideo(f) { $$('novo-grande').hidden = !(f && f.size > LIMITE_MB * 1e6); }
+async function marcouVideo(f) {
+  $$('novo-grande').hidden = !(f && f.size > LIMITE_MB * 1e6);
+  const av = $$('novo-h265'); av.hidden = true;
+  if (f && !(await temImagem(URL.createObjectURL(f)))) { av.hidden = false; av.textContent = MSG_H265 + ' Dá pra criar assim, mas a imagem só aparece depois que eu fizer a cópia leve: me avisa no chat (com o link do Drive, se for grande).'; }
+}
 $$('novo-video').onchange = (e) => { novoAtalho = null; marcouVideo(e.target.files[0]); };
 $$('novo-video').onclick = async (e) => {
   if (!window.showOpenFilePicker) return;
@@ -354,7 +377,8 @@ async function puxar() {
     const pj = lista.find((x) => x.name === 'projeto.json'), md = lista.find((x) => x.name === 'midias.json');
     if (md && md.sha !== nuvem.shaMidias && !nuvem.enviando) {
       const temPc = Object.values(P.midia || {}).some((c) => c && c.no_pc);
-      if (temPc) { nuvem.shaMidias = md.sha; marcar('mídia nova no GitHub: F5 quando quiser'); }
+      if (temPc && semImagem && !sujo()) { aviso('A cópia leve chegou: recarregando'); setTimeout(() => location.reload(), 900); }
+      else if (temPc) { nuvem.shaMidias = md.sha; marcar(semImagem ? 'cópia leve chegou: aperta F5' : 'mídia nova no GitHub: F5 quando quiser'); }
       else if (!sujo()) { aviso('O King Bot mandou mídia nova: recarregando'); setTimeout(() => location.reload(), 900); }
       else marcar('mídia nova no GitHub: salva e recarrega');
       return;
