@@ -118,6 +118,7 @@ Isso evita recodificar o vídeo inteiro antes de começar (era o passo mais lent
 - Página: arrastar trecho de vídeo pros lados reordena (legendas e efeitos andam junto com o conteúdo); arrastar trecho pra linha "Por cima" vira clipe por cima (levando as legendas dele); arrastar clipe por cima pra linha do vídeo vira trecho. Duplicar qualquer coisa (Ctrl+D / botão). Tela cheia (F / botão no player).
 - Mídia do computador: botão Mídia, Ctrl+O ou arrastar arquivo pra página. Online, o arquivo sobe pro repo em `projetos/<nome>/midia/` (até 95 MB) e entra em `P.midia`; na lista de Clipes tem "+ no vídeo" (divide o trecho na agulha e entra no meio) e "+ por cima".
 - Site: botão "<" volta pros projetos (salva antes); "Novo projeto" cria direto do site com um vídeo do PC (um trecho com o vídeo inteiro). Do lado do King Bot: `python3 motor/nuvem.py baixar <nome> [--pasta DIR]` traz o projeto e a mídia; `subir` depois gera a mídia leve.
+- v7.17: vídeo acima de 95 MB não vai pro GitHub. No projeto a mídia vira `{"arquivo": "midia/x.mp4", "no_pc": {"nome", "tamanho"}, "drive": "link"}`; o site abre do PC do Zaza e pede o arquivo de novo ao reabrir (ou abre com a cópia leve). `nuvem.py baixar <nome>` baixa esses pelo link do Drive (precisa estar "qualquer pessoa com o link"); sem link, imprime `FALTA ...`: peça o link ao Zaza. Depois `subir` gera a cópia leve.
 - Corrigido: o som da prévia podia travar a página (laço sem fim) quando um trecho começava no fim exato de um pedaço da cópia leve.
 
 ## Fontes

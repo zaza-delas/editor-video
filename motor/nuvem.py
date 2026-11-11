@@ -17,6 +17,9 @@ Token: variável EDITOR_GITHUB_TOKEN ou arquivo .segredos/github_token numa past
 """
 import argparse
 import datetime
+import re
+import urllib.error
+import urllib.request
 import hashlib
 import json
 import os
@@ -157,6 +160,69 @@ def trazer_midia(repo, nome, pasta_local):
     return vindos
 
 
+def id_drive(link):
+    m = re.search(r"/file/d/([A-Za-z0-9_-]{10,})", link) or re.search(r"[?&]id=([A-Za-z0-9_-]{10,})", link)
+    return m.group(1) if m else None
+
+
+def baixar_drive(link, dst, tamanho=None):
+    """Baixa um arquivo do Drive compartilhado com "qualquer pessoa com o link" (aguenta 1 GB+)."""
+    fid = id_drive(link)
+    if not fid:
+        raise RuntimeError(f"não achei o id do arquivo nesse link do Drive: {link}")
+    url = f"https://drive.usercontent.google.com/download?id={fid}&export=download&confirm=t"
+    tmp = dst + ".baixando"
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        r = urllib.request.urlopen(req, timeout=60)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"o Drive respondeu {e.code}: o arquivo não existe ou não está como 'qualquer pessoa com o link'")
+    with r:
+        if "text/html" in (r.headers.get("Content-Type") or ""):
+            raise RuntimeError("o Drive devolveu uma página, não o vídeo: o link precisa estar como "
+                               "'qualquer pessoa com o link' (ou o arquivo foi apagado)")
+        total, feito, passo = int(r.headers.get("Content-Length") or tamanho or 0), 0, 0
+        with open(tmp, "wb") as f:
+            while True:
+                b = r.read(1 << 20)
+                if not b:
+                    break
+                f.write(b)
+                feito += len(b)
+                if total and feito * 10 // total > passo:
+                    passo = feito * 10 // total
+                    log(f"  drive: {feito / 1e6:.0f}/{total / 1e6:.0f} MB")
+    if tamanho and os.path.getsize(tmp) != tamanho:
+        log(f"  aviso: baixou {os.path.getsize(tmp)} bytes, o arquivo do PC tinha {tamanho} (é o mesmo vídeo?)")
+    os.replace(tmp, dst)
+
+
+def trazer_do_pc(remoto, pasta_local):
+    """Vídeo grande que ficou no PC do Zaza (midia com no_pc): baixa pelo link do Drive."""
+    faltam = []
+    for nome, c in (remoto.get("midia") or {}).items():
+        if not isinstance(c, dict) or not c.get("no_pc"):
+            continue
+        dst = os.path.join(pasta_local, c["arquivo"])
+        tam = c["no_pc"].get("tamanho")
+        if os.path.exists(dst) and (not tam or os.path.getsize(dst) == tam):
+            continue
+        orig = c["no_pc"].get("nome") or c["arquivo"]
+        if not c.get("drive"):
+            faltam.append(f"{nome}: {orig} está só no PC do Zaza, sem link do Drive")
+            continue
+        log(f"baixando do Drive: {orig} -> {c['arquivo']}")
+        try:
+            baixar_drive(c["drive"], dst, tam)
+            print(f"mídia do Drive: {c['arquivo']}")
+        except Exception as e:
+            faltam.append(f"{nome}: {orig}: {e}")
+    for x in faltam:
+        print("FALTA " + x)
+    return faltam
+
+
 def baixar(alvo, pasta=None):
     """alvo = projeto.json local, ou o nome de um projeto criado no site (vai pra --pasta ou projetos/<nome>)."""
     repo = clone(REPO_PROJ)
@@ -176,6 +242,7 @@ def baixar(alvo, pasta=None):
     if vindos:
         print(f"mídia do site: {', '.join(vindos)}")
     remoto = json.load(open(arq, encoding="utf-8"))
+    trazer_do_pc(remoto, os.path.dirname(os.path.abspath(caminho)))
     from editor import CAMPOS
     novo = dict(remoto)
     for k, v in local.items():  # campos fora do formato da página continuam

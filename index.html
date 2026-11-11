@@ -1291,6 +1291,8 @@ requestAnimationFrame(() => { const L = linha(); pxs = Math.min(300, Math.max(20
       <label for="novo-nome">Novo projeto</label>
       <input type="text" id="novo-nome" placeholder="nome (ex.: chileno_v1)" autocomplete="off" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:15px">
       <div class="linha"><input type="file" id="novo-video" accept="video/*"></div>
+      <div id="novo-grande" class="fraco" hidden style="margin-top:8px">Vídeo grande: ele não sobe, abre direto do teu PC e o projeto salva no GitHub. Pra eu renderizar, cola o link do Drive dele (compartilhado com "qualquer pessoa com o link"):
+        <input type="text" id="novo-drive" placeholder="https://drive.google.com/file/d/..." autocomplete="off" style="width:100%;margin-top:6px;padding:9px 12px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:14px"></div>
       <div class="linha"><button class="principal" id="bt-novo">Criar</button><span class="fraco" id="novo-estado"></span></div>
       <div class="erro" id="erro-novo"></div>
     </div>
@@ -1306,6 +1308,7 @@ const NUVEM = { dono: 'zaza-delas', repo: 'editor-video-projetos', ramo: 'main' 
 const API = `https://api.github.com/repos/${NUVEM.dono}/${NUVEM.repo}`;
 const nuvem = { modo: null, nome: null, sha: null, shaMidias: null, salvando: false, timer: null, ultimoLido: null, enviando: 0 };
 const locais = {}; // arquivos que vieram deste computador nesta sessão (não baixa de volta do GitHub)
+const atalhos = {}; // "projeto/midia/arq" -> atalho do arquivo no PC (Chrome), pra guardar e reabrir com um clique
 const LIMITE_MB = 95; // o GitHub recusa arquivo acima de 100 MB
 const $$ = (id) => document.getElementById(id);
 const tokenSalvo = () => { try { return localStorage.getItem('kbeditor:token') || ''; } catch (e) { return ''; } };
@@ -1337,6 +1340,20 @@ function duracaoMidia(url, tipo) {
 }
 const tipoPorNome = (n) => (/\.(mp4|mov|webm|mkv|m4v)$/i.test(n) ? 'video' : /\.(mp3|wav|m4a|aac|ogg|opus|flac)$/i.test(n) ? 'audio' : /\.(png|jpe?g|webp|gif)$/i.test(n) ? 'imagem' : null);
 const slug = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+const tamTxt = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1).replace('.', ',') + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB');
+// guarda o atalho do arquivo do PC no navegador (só Chrome/Edge): na volta é um clique pra liberar, sem procurar o arquivo
+const idb = {
+  abrir() { return new Promise((ok, erro) => { const r = indexedDB.open('kbeditor', 1); r.onupgradeneeded = () => r.result.createObjectStore('arquivos'); r.onsuccess = () => ok(r.result); r.onerror = () => erro(r.error); }); },
+  async pegar(k) { try { const db = await idb.abrir(); return await new Promise((ok) => { const r = db.transaction('arquivos').objectStore('arquivos').get(k); r.onsuccess = () => ok(r.result || null); r.onerror = () => ok(null); }); } catch (e) { return null; } },
+  async por(k, v) { try { const db = await idb.abrir(); await new Promise((ok) => { const t = db.transaction('arquivos', 'readwrite'); t.objectStore('arquivos').put(v, k); t.oncomplete = ok; t.onerror = ok; }); } catch (e) { } },
+};
+async function escolherDoPc(aceita) { // {file, handle}; handle só onde o navegador deixa
+  if (window.showOpenFilePicker) {
+    try { const [h] = await showOpenFilePicker({ types: [{ description: 'Vídeo', accept: { [aceita || 'video/*']: [] } }] }); return { file: await h.getFile(), handle: h }; }
+    catch (e) { if (e.name === 'AbortError') return null; }
+  }
+  return new Promise((ok) => { const i = document.createElement('input'); i.type = 'file'; i.accept = aceita || 'video/*'; i.onchange = () => ok(i.files[0] ? { file: i.files[0] } : null); i.click(); });
+}
 const pasta = (nome) => '/contents/projetos/' + encodeURIComponent(nome);
 
 async function telaInicio() {
@@ -1394,6 +1411,16 @@ async function abrirNuvem(nome) {
     nuvem.modo = 'nuvem'; nuvem.nome = nome; nuvem.sha = proj.sha; nuvem.shaMidias = arq['midias.json'] ? arq['midias.json'].sha : null;
     nuvem.ultimoLido = b64txt(proj.content);
     const projeto = JSON.parse(nuvem.ultimoLido), midias = JSON.parse(midiasTxt);
+    // vídeo grande que fica no PC do Zaza (não foi pro GitHub): pede o arquivo de novo
+    const noPc = [];
+    for (const [n, c] of Object.entries(projeto.midia || {})) {
+      if (!c || typeof c !== 'object' || !c.no_pc) continue;
+      const url = locais[nome + '/' + c.arquivo]; // escolhido agora há pouco (projeto novo, Mídia)
+      if (url) { const dur = await duracaoMidia(url, 'video'); midias[n] = { tipo: 'video', src: url, duracao: dur, local: true, mapa: [{ a: 0, b: dur, o: 0 }] }; }
+      else noPc.push([n, c]);
+    }
+    let driveMudou = false;
+    if (noPc.length) driveMudou = await pedirDoPc(nome, projeto, noPc, midias);
     // mídia que veio do computador do Zaza e o King Bot ainda não transformou em mídia leve
     const noRepo = arq['midia'] ? (await gh(pasta(nome) + '/midia').catch(() => [])).map((x) => 'midia/' + x.name) : [];
     for (const [n, cam] of Object.entries(projeto.midia || {})) {
@@ -1406,9 +1433,66 @@ async function abrirNuvem(nome) {
     }
     window.__SEM_RECUPERAR = true;
     iniciarEditor({ projeto, midias });
+    if (driveMudou) setTimeout(() => salvar(true), 800);
   } catch (e) {
     $$('erro-projetos').textContent = 'Não abriu: ' + e.message; telaInicio();
   }
+}
+
+// tela "escolhe de novo o vídeo do PC" ao reabrir um projeto com vídeo grande
+function pedirDoPc(nome, projeto, noPc, midias) {
+  return new Promise((pronto) => {
+    const L = $$('lista-projetos'); L.innerHTML = '';
+    const info = document.createElement('p'); info.className = 'fraco'; info.style.margin = '0 0 10px';
+    info.textContent = 'Esse vídeo fica no teu PC (é grande demais pro GitHub). Abre ele de novo pra editar:';
+    L.appendChild(info);
+    const estado = {}; let driveMudou = false;
+    const bt = document.createElement('button'); bt.className = 'principal'; bt.textContent = 'Abrir o projeto';
+    const nota = document.createElement('p'); nota.className = 'fraco';
+    function conferir() {
+      const falta = noPc.filter(([n]) => !estado[n]);
+      const semLeve = falta.filter(([n]) => !midias[n]);
+      bt.disabled = semLeve.length > 0;
+      nota.textContent = !falta.length ? '' : semLeve.length ? 'Sem o arquivo não dá pra abrir: ainda não tem cópia leve desse vídeo.'
+        : 'Sem o arquivo abre com a cópia leve: dá pra editar, mas só estica o corte 1,5 s pra cada lado.';
+      bt.textContent = falta.length && !semLeve.length ? 'Abrir com a cópia leve' : 'Abrir o projeto';
+    }
+    for (const [n, c] of noPc) {
+      const k = nome + '/' + c.arquivo, cx = document.createElement('div');
+      cx.style.cssText = 'border:1px solid var(--linha);border-radius:8px;padding:10px 12px;margin-bottom:10px';
+      cx.innerHTML = `<div style="margin-bottom:8px">${esc0(c.no_pc.nome || c.arquivo)} <span class="fraco">${c.no_pc.tamanho ? tamTxt(c.no_pc.tamanho) : ''}</span></div>`;
+      const b = document.createElement('button'), st = document.createElement('div'); st.className = 'fraco'; st.style.marginTop = '2px';
+      b.textContent = 'Escolher no PC';
+      const usar = async (r) => {
+        if (!r) return;
+        const url = URL.createObjectURL(r.file), dur = await duracaoMidia(url, 'video');
+        if (!dur) { st.textContent = 'não consegui ler esse vídeo'; return; }
+        locais[k] = url; if (r.handle) { atalhos[k] = r.handle; idb.por(k, r.handle); }
+        midias[n] = { tipo: 'video', src: url, duracao: dur, local: true, mapa: [{ a: 0, b: dur, o: 0 }] };
+        estado[n] = true; b.textContent = 'Trocar';
+        st.textContent = r.file.size === c.no_pc.tamanho ? '✓ ' + r.file.name : `⚠ ${r.file.name} tem ${tamTxt(r.file.size)}, o do projeto tinha ${tamTxt(c.no_pc.tamanho)}. Confere se é o mesmo.`;
+        conferir();
+      };
+      b.onclick = async () => {
+        const h = atalhos[k] || await idb.pegar(k);
+        if (h && !estado[n]) {
+          try { if ((await h.requestPermission({ mode: 'read' })) === 'granted') return usar({ file: await h.getFile(), handle: h }); } catch (e) { /* arquivo mudou de lugar: escolhe de novo */ }
+        }
+        usar(await escolherDoPc());
+      };
+      idb.pegar(k).then(async (h) => { // já tem o atalho: o botão vira "abrir" (e abre sozinho se o Chrome já liberou)
+        if (!h || estado[n]) return;
+        atalhos[k] = h; b.textContent = 'Abrir ' + (h.name || 'do PC');
+        try { if ((await h.queryPermission({ mode: 'read' })) === 'granted') usar({ file: await h.getFile(), handle: h }); } catch (e) { }
+      });
+      const d = document.createElement('input'); d.type = 'text'; d.value = c.drive || ''; d.placeholder = 'link do Drive (pra o King Bot renderizar)';
+      d.style.cssText = 'width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:13px';
+      d.onchange = () => { const v = d.value.trim(); if (v !== (c.drive || '')) { if (v) c.drive = v; else delete c.drive; driveMudou = true; } };
+      cx.append(b, st, d); L.appendChild(cx);
+    }
+    bt.onclick = () => { L.innerHTML = '<span class="fraco">Abrindo...</span>'; pronto(driveMudou); };
+    L.append(bt, nota); conferir();
+  });
 }
 
 function iniciarEditor(dados) {
@@ -1428,8 +1512,13 @@ function iniciarEditor(dados) {
 
 // ---------- mídia do computador vai pro repo ----------
 async function enviarMidia(f, caminho, nomeMidia) {
-  if (f.size > LIMITE_MB * 1e6) { aviso(`${f.name} tem ${Math.round(f.size / 1e6)} MB: o GitHub só aceita até ${LIMITE_MB}. Fica só nesta sessão; manda no chat.`); return; }
   locais[nuvem.nome + '/' + caminho] = M[nomeMidia] && M[nomeMidia].src;
+  if (f.size > LIMITE_MB * 1e6) { // grande: fica no PC, o projeto só guarda o nome e o link do Drive
+    const drive = (prompt(`${f.name} tem ${tamTxt(f.size)}: grande demais pro GitHub, fica no teu PC (na volta o editor pede ele de novo).\n\nPra eu renderizar, cola o link do Drive dele (pode deixar vazio e mandar depois):`) || '').trim();
+    P.midia[nomeMidia] = { arquivo: caminho, no_pc: { nome: f.name, tamanho: f.size }, ...(drive ? { drive } : {}) };
+    marcar('não salvo'); clearTimeout(nuvem.timer); nuvem.timer = setTimeout(salvar, 500);
+    return;
+  }
   nuvem.enviando++;
   try {
     marcar('enviando ' + f.name + '...');
@@ -1446,7 +1535,7 @@ $$('bt-novo').onclick = async () => {
   E('');
   if (!nome) return E('Põe um nome.');
   if (!f) return E('Escolhe o vídeo.');
-  if (f.size > LIMITE_MB * 1e6) return E(`Esse vídeo tem ${Math.round(f.size / 1e6)} MB e o GitHub só aceita até ${LIMITE_MB} MB. Corta antes ou manda no chat.`);
+  const grande = f.size > LIMITE_MB * 1e6, drive = $$('novo-drive').value.trim();
   const bt = $$('bt-novo'), st = (t) => { $$('novo-estado').textContent = t; };
   bt.disabled = true;
   try {
@@ -1454,11 +1543,14 @@ $$('bt-novo').onclick = async () => {
     const ext = (f.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase(), caminho = 'midia/bruto' + ext, url = URL.createObjectURL(f);
     const dur = await duracaoMidia(url, 'video');
     if (!dur) return E('Não consegui ler esse vídeo.');
-    st('enviando o vídeo 0%');
-    await enviarArquivo(pasta(nome) + '/' + caminho, await arquivoB64(f), 'projeto novo: ' + nome, (p) => st(`enviando o vídeo ${p}%`));
+    if (!grande) {
+      st('enviando o vídeo 0%');
+      await enviarArquivo(pasta(nome) + '/' + caminho, await arquivoB64(f), 'projeto novo: ' + nome, (p) => st(`enviando o vídeo ${p}%`));
+    }
     locais[nome + '/' + caminho] = url;
+    const k = nome + '/' + caminho; if (novoAtalho && novoAtalho.arq === f) { atalhos[k] = novoAtalho.handle; await idb.por(k, novoAtalho.handle); }
     st('criando o projeto...');
-    const projeto = { nome, formato: { largura: 1080, altura: 1920, fps: 30, lufs: -14 }, midia: { bruto: caminho },
+    const projeto = { nome, formato: { largura: 1080, altura: 1920, fps: 30, lufs: -14 }, midia: { bruto: grande ? { arquivo: caminho, no_pc: { nome: f.name, tamanho: f.size }, ...(drive ? { drive } : {}) } : caminho },
       trechos: [{ midia: 'bruto', de: 0, ate: Math.round(dur * 1000) / 1000 }], legendas: [] };
     await gh(pasta(nome) + '/projeto.json', { method: 'PUT', body: { message: 'projeto novo: ' + nome, content: txtb64(JSON.stringify(projeto, null, 2) + '\n'), branch: NUVEM.ramo } });
     let ind = [], shaInd;
@@ -1470,6 +1562,18 @@ $$('bt-novo').onclick = async () => {
     abrirNuvem(nome);
   } catch (e) { E('Não criou: ' + e.message); st(''); }
   bt.disabled = false;
+};
+
+// escolher o vídeo do projeto novo: no Chrome guarda o atalho (reabre com um clique depois)
+let novoAtalho = null;
+function marcouVideo(f) { $$('novo-grande').hidden = !(f && f.size > LIMITE_MB * 1e6); }
+$$('novo-video').onchange = (e) => { novoAtalho = null; marcouVideo(e.target.files[0]); };
+$$('novo-video').onclick = async (e) => {
+  if (!window.showOpenFilePicker) return;
+  e.preventDefault();
+  const r = await escolherDoPc(); if (!r) return;
+  const dt = new DataTransfer(); dt.items.add(r.file); $$('novo-video').files = dt.files;
+  novoAtalho = r.handle ? { arq: $$('novo-video').files[0], handle: r.handle } : null; marcouVideo(r.file);
 };
 
 // ---------- salvar no repo e puxar o que o King Bot mudar ----------
@@ -1503,7 +1607,9 @@ async function puxar() {
     const lista = await gh(pasta(nuvem.nome));
     const pj = lista.find((x) => x.name === 'projeto.json'), md = lista.find((x) => x.name === 'midias.json');
     if (md && md.sha !== nuvem.shaMidias && !nuvem.enviando) {
-      if (!sujo()) { aviso('O King Bot mandou mídia nova: recarregando'); setTimeout(() => location.reload(), 900); }
+      const temPc = Object.values(P.midia || {}).some((c) => c && c.no_pc);
+      if (temPc) { nuvem.shaMidias = md.sha; marcar('mídia nova no GitHub: F5 quando quiser'); }
+      else if (!sujo()) { aviso('O King Bot mandou mídia nova: recarregando'); setTimeout(() => location.reload(), 900); }
       else marcar('mídia nova no GitHub: salva e recarrega');
       return;
     }
@@ -1538,6 +1644,6 @@ function ligarNuvem() {
 })();
 </script>
 
-<!-- editor v7.16 -->
+<!-- editor v7.17 -->
 </body>
 </html>
