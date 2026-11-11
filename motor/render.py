@@ -293,6 +293,28 @@ def par(n):
     return n + (n % 2)
 
 
+MODELO_RUIDO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modelos", "cb.rnnn")
+# realçar voz: tira o grave embolado, abre a presença e o brilho, segura a dinâmica (como o "Enhance voice")
+REALCE_VOZ = ("highpass=f=80,equalizer=f=250:t=q:w=1:g=-2,equalizer=f=3200:t=q:w=1.2:g=4,"
+              "equalizer=f=9000:t=h:w=1:g=2,acompressor=threshold=0.1:ratio=3:attack=5:release=90:makeup=1.6,deesser=i=0.3")
+
+
+def tratar_voz(o):
+    """Filtros de "reduzir_ruido" (0-1, força do RNNoise) e "realcar_voz" de um trecho ou clipe por cima.
+    Vazio quando não tem nada. Vai depois do aresample=48000 (o RNNoise trabalha em 48 kHz)."""
+    f = []
+    nr = float(o.get("reduzir_ruido") or 0)
+    if nr > 0:
+        if os.path.exists(MODELO_RUIDO):
+            # o arnndn devolve tudo 480 amostras (10 ms) atrasado: corta pra voz ficar colada na boca
+            f.append(f"arnndn=m='{MODELO_RUIDO}':mix={min(nr, 1):.2f},atrim=start_sample=480,asetpts=PTS-STARTPTS")
+        else:
+            f.append(f"afftdn=nr={6 + 14 * min(nr, 1):.0f}:nf=-40:tn=1")
+    if o.get("realcar_voz"):
+        f.append(REALCE_VOZ)
+    return ",".join(f) + "," if f else ""
+
+
 def montar(p, textos, rascunho, so_trecho=None, prontos=None):
     """Grafo inteiro. so_trecho=k: só o trecho k (vídeo+áudio prontos, pra pré-render).
     prontos=lista ffconcat dos trechos já prontos: entra como uma entrada só, no lugar do concat."""
@@ -353,7 +375,7 @@ def montar(p, textos, rascunho, so_trecho=None, prontos=None):
                                f"aformat=sample_fmts=fltp:channel_layouts=stereo,volume={fx.get('volume', 1.0) * base:.4f}[{nm}]")
                 nomes.append(f"[{nm}]")
             mix = "".join(nomes) + (f"amix=inputs={len(nomes)}:normalize=0," if len(nomes) > 1 else "anull,")
-            filtros.append(f"{mix}apad,atrim=duration={dur:.3f},{bordas}[a{k}]")
+            filtros.append(f"{mix}{tratar_voz(t)}apad,atrim=duration={dur:.3f},{bordas}[a{k}]")
         vs_as.append(f"[v{k}][a{k}]")
 
     if so_trecho is not None:
@@ -390,7 +412,7 @@ def montar(p, textos, rascunho, so_trecho=None, prontos=None):
         if not (o.get("mudo") or o["_imagem"] or o["_info"]["audios"] == 0):
             fx = (o.get("faixas") or [{"faixa": 0}])[0].get("faixa", 0)
             filtros.append(f"[{idx}:a:{fx}]asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
-                           f"atrim=duration={dur:.3f},volume={float(o.get('volume', 1.0)):.4f},adelay={int(round(em * 1000))}:all=1[sa{j}]")
+                           f"{tratar_voz(o)}atrim=duration={dur:.3f},volume={float(o.get('volume', 1.0)):.4f},adelay={int(round(em * 1000))}:all=1[sa{j}]")
             aud_sobre.append(f"[sa{j}]")
 
     # textos por cima

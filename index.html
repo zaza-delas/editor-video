@@ -134,6 +134,10 @@ button.icone.on { color: var(--destaque); background: var(--painel2); }
 .cabeca { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; z-index: 5; pointer-events: none; }
 .cabeca::before { content: ""; position: absolute; top: 0; left: -5px; border: 6px solid transparent; border-top: 8px solid #fff; }
 .guia { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--destaque); z-index: 4; pointer-events: none; display: none; }
+.player.cheia { position: fixed; inset: 0; z-index: 40; background: #000; border-radius: 0; align-content: center; padding: 12px; }
+.player.cheia .tela { max-width: min(100vw, calc((100vh - 80px) * 9 / 16)); }
+.player.cheia .transporte { max-width: 640px; }
+.pista.h-video.alvo { outline: 2px dashed #ffffffaa; outline-offset: -1px; border-radius: 5px; }
 .aviso { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--texto); color: var(--fundo); padding: 10px 16px; border-radius: 8px; font-weight: 500; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
 .aviso.on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .aviso { transition: none; } }
@@ -218,12 +222,19 @@ button.icone.on { color: var(--destaque); background: var(--painel2); }
   <symbol id="i-mais" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-4-4"/></symbol>
   <symbol id="i-olho" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></symbol>
   <symbol id="i-varios" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="m5.5 7 1.5 1.5 2.5-3M15.5 17l1.5 1.5 2.5-3"/></symbol>
+  <symbol id="i-duplicar" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-cheia" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-midia" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-voltar" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
   <symbol id="i-ouvir" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></symbol>
 </svg>
 
 <div class="app">
   <div class="topo">
+    <button class="icone" id="bt-menu" title="Projetos" hidden><svg><use href="#i-voltar"/></svg></button>
     <h1 id="titulo">Editor</h1>
+    <button id="bt-midia" title="Adicionar mídia do computador (Ctrl+O)"><svg style="width:16px;height:16px;vertical-align:-3px;stroke:currentColor;fill:none;stroke-width:2"><use href="#i-midia"/></svg> Mídia</button>
+    <input type="file" id="arq-midia" accept="video/*,audio/*,image/*" multiple hidden>
     <button id="bt-baixar" class="principal">Baixar projeto</button>
   </div>
 
@@ -237,7 +248,7 @@ button.icone.on { color: var(--destaque); background: var(--painel2); }
     <div class="transporte">
       <span class="tc" id="tc"></span>
       <button id="bt-play" class="icone" title="Tocar (espaço)" style="width:44px;height:44px"><svg><use href="#i-play"/></svg></button>
-      <span></span>
+      <span style="justify-self:end"><button class="icone" id="bt-cheia" title="Tela cheia (F)"><svg><use href="#i-cheia"/></svg></button></span>
     </div>
   </div>
 
@@ -249,6 +260,7 @@ button.icone.on { color: var(--destaque); background: var(--painel2); }
       <button class="icone" id="bt-refazer" title="Refazer (Ctrl+Shift+Z ou Ctrl+Y)"><svg><use href="#i-refazer"/></svg></button>
       <span class="sep"></span>
       <button class="icone" id="bt-split" title="Dividir na agulha (Ctrl+B)"><svg><use href="#i-split"/></svg></button>
+      <button class="icone" id="bt-duplicar" title="Duplicar (Ctrl+D)"><svg><use href="#i-duplicar"/></svg></button>
       <button class="icone" id="bt-apagar" title="Apagar selecionado (Delete)"><svg><use href="#i-lixo"/></svg></button>
       <button class="icone" id="bt-olho" title="Desativar / ativar (H)"><svg><use href="#i-olho"/></svg></button>
       <span class="sep"></span>
@@ -353,7 +365,7 @@ function remapear(velho, novo, mapaIdx) {
     const y = tn[nk]; const c = Math.min(Math.max(src, y.de), y.de + y.dur);
     return { t: y.ini + (c - y.de), fora: false };
   };
-  P.legendas = P.legendas.map((l) => { const a = map(l.de, false), b = map(l.ate, true); return { ...l, de: r3(a.t), ate: r3(b.t) }; })
+  P.legendas = P.legendas.map((l) => { const a = map(l.de, false), b = map(l.ate, true); let ate = b.t; if (!a.fora && ate - a.t < 0.05 && l.ate - l.de >= 0.05) ate = Math.min(a.t + (l.ate - l.de), totalN); return { ...l, de: r3(a.t), ate: r3(ate) }; })
     .filter((l) => l.ate - l.de >= 0.05);
   P.sfx = P.sfx.map((s) => { const a = map(s.em, false); return a.fora ? null : { ...s, em: r3(a.t) }; }).filter(Boolean);
   P.sobre = P.sobre.map((o) => { const a = map(o.em, false); return a.fora ? null : { ...o, em: r3(a.t) }; }).filter(Boolean);
@@ -361,15 +373,27 @@ function remapear(velho, novo, mapaIdx) {
 }
 
 // ---------- mídia e som ----------
-const els = {};
-for (const [nome, m] of Object.entries(M)) {
-  if (m.tipo === 'video') { const v = document.createElement('video'); v.src = m.src; v.preload = 'auto'; v.playsInline = true; v.muted = true; v.setAttribute('playsinline', ''); els[nome] = v; }
-  else if (m.tipo === 'imagem') { const im = new Image(); im.src = m.src; els[nome] = im; }
+const els = {}, elsS = {};
+function novoVideo(src) { const v = document.createElement('video'); v.src = src; v.preload = 'auto'; v.playsInline = true; v.muted = true; v.setAttribute('playsinline', ''); return v; }
+async function miniLocal(nome) { // tira de miniaturas pra vídeo que veio do computador (o do King Bot já vem pronto)
+  const m = M[nome]; if (!m || m.mini || m.tipo !== 'video' || !m.duracao) return;
+  const v = novoVideo(m.src), dur = m.duracao, n = Math.max(1, Math.min(240, Math.ceil(dur * 2))), ps = n / dur;
+  const c = document.createElement('canvas'); c.width = n * 36; c.height = 64; const g = c.getContext('2d');
+  await new Promise((ok) => { v.onloadeddata = ok; v.onerror = ok; setTimeout(ok, 8000); });
+  for (let i = 0; i < n; i++) {
+    await new Promise((ok) => { v.onseeked = ok; setTimeout(ok, 1500); v.currentTime = Math.min(dur - 0.05, (i + 0.5) / ps); });
+    const iw = v.videoWidth, ih = v.videoHeight; if (!iw) break;
+    const k = Math.max(36 / iw, 64 / ih); g.drawImage(v, i * 36 + (36 - iw * k) / 2, (64 - ih * k) / 2, iw * k, ih * k);
+  }
+  m.mini = { src: c.toDataURL('image/jpeg', 0.6), n, por_seg: ps };
+  desenharTimeline();
 }
-const elsS = {};
-for (const [nome, m] of Object.entries(M)) {
-  if (m.tipo === 'video') { const v = document.createElement('video'); v.src = m.src; v.preload = 'auto'; v.playsInline = true; v.muted = true; v.setAttribute('playsinline', ''); elsS[nome] = v; }
-  else if (m.tipo === 'imagem') elsS[nome] = els[nome];
+function prepararMidia(nome) { // elementos de imagem/vídeo (um pro vídeo principal, outro pro clipe por cima) e o som
+  const m = M[nome];
+  if (m.tipo === 'video') { els[nome] = novoVideo(m.src); elsS[nome] = novoVideo(m.src); }
+  else if (m.tipo === 'imagem') { const im = new Image(); im.src = m.src; els[nome] = im; elsS[nome] = im; }
+  if (actx && (m.tipo === 'audio' || m.tipo === 'video')) carregarSom(nome);
+  if (m.tipo === 'video' && !m.mini) setTimeout(() => miniLocal(nome), 300);
 }
 /* Som da prévia: tudo passa pelo Web Audio (o vídeo fica mudo e só desenha a imagem).
    Assim volume acima de 100%, mudo e posição dos SFX valem em qualquer aparelho, inclusive iPhone,
@@ -377,25 +401,85 @@ for (const [nome, m] of Object.entries(M)) {
 let actx = null, somOk = false; const bufs = {}; let fontes = [];
 function b64buf(url) { const s = atob(url.split(',')[1]); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; }
 function decodificar(buf) { return new Promise((ok, erro) => { const r = actx.decodeAudioData(buf, ok, erro); if (r && r.then) r.then(ok, erro); }); }
-try {
-  actx = new (window.AudioContext || window.webkitAudioContext)();
-  for (const [n, m] of Object.entries(M)) if (m.tipo === 'audio' || m.tipo === 'video') decodificar(b64buf(m.src)).then((b) => { bufs[n] = b; somOk = true; }).catch(() => {});
-} catch (err) { actx = null; }
+function bytesDe(url) { return url.startsWith('data:') ? Promise.resolve(b64buf(url)) : fetch(url).then((r) => r.arrayBuffer()); }
+function picosDoBuffer(b, porSeg = 40) { // onda pra mídia que veio do computador (a do King Bot já vem pronta)
+  const d = b.getChannelData(0), passo = Math.max(1, Math.floor(b.sampleRate / porSeg)), v = [];
+  for (let i = 0; i < d.length; i += passo) { let mx = 0; for (let j = i; j < Math.min(d.length, i + passo); j += 4) { const a = Math.abs(d[j]); if (a > mx) mx = a; } v.push(mx); }
+  const ref = [...v].sort((a, b) => a - b)[Math.floor(v.length * 0.98)] || 1;
+  return v.map((x) => Math.min(100, Math.round(x * 100 / ref)));
+}
+function carregarSom(n) {
+  const m = M[n];
+  bytesDe(m.src).then(decodificar).then((b) => {
+    bufs[n] = b; somOk = true;
+    if (!m.picos) { m.picos = picosDoBuffer(b); if (typeof desenharTimeline === 'function' && document.readyState !== 'loading') desenharTimeline(); }
+  }).catch(() => {});
+}
+try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (err) { actx = null; }
+for (const n of Object.keys(M)) prepararMidia(n);
+
+/* ---------- reduzir ruído e realçar voz (prévia) ----------
+   Ruído: RNNoise no navegador (mesma rede do arnndn do render), calculado uma vez por mídia e misturado
+   com o original pela força. Precisa de internet na primeira vez (baixa o wasm). Realçar voz: mesmo EQ +
+   compressor do render, em Web Audio. */
+const bufsNR = {}, nrPendente = {};
+let rnnoise = null;
+async function prepararRuido(nome) {
+  if (bufsNR[nome] || nrPendente[nome] || !bufs[nome]) return;
+  nrPendente[nome] = true;
+  try {
+    if (!rnnoise) { const mod = await import('https://cdn.jsdelivr.net/npm/@shiguredo/rnnoise-wasm@2025.1.5/dist/rnnoise.js'); rnnoise = await mod.Rnnoise.load(); }
+    const b = bufs[nome], SR = 48000, n = Math.ceil(b.duration * SR);
+    const off = new OfflineAudioContext(1, n, SR), src = off.createBufferSource(); src.buffer = b; src.connect(off.destination); src.start();
+    const r48 = (await off.startRendering()).getChannelData(0);
+    const st = rnnoise.createDenoiseState(), F = rnnoise.frameSize, out = new Float32Array(n), fr = new Float32Array(F);
+    for (let i = 0; i + F <= n; i += F) {
+      for (let j = 0; j < F; j++) fr[j] = r48[i + j] * 32768;
+      st.processFrame(fr);
+      for (let j = 0; j < F; j++) out[i + j] = fr[j] / 32768;
+      if ((i / F) % 500 === 499) await new Promise((ok) => setTimeout(ok, 0));
+    }
+    st.destroy();
+    const nb = actx.createBuffer(1, n, SR); nb.copyToChannel(out, 0); bufsNR[nome] = nb;
+    if (tocando) agendarTudo();
+  } catch (e) { aviso('Prévia do ruído precisa de internet (no vídeo final funciona)'); }
+  nrPendente[nome] = false;
+}
+function cadeiaVoz(destino) { // realçar voz: mesmo tratamento do render (REALCE_VOZ em render.py)
+  const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 80;
+  const p1 = actx.createBiquadFilter(); p1.type = 'peaking'; p1.frequency.value = 250; p1.Q.value = 1; p1.gain.value = -2;
+  const p2 = actx.createBiquadFilter(); p2.type = 'peaking'; p2.frequency.value = 3200; p2.Q.value = 1.2; p2.gain.value = 4;
+  const hs = actx.createBiquadFilter(); hs.type = 'highshelf'; hs.frequency.value = 9000; hs.gain.value = 2;
+  const cp = actx.createDynamicsCompressor(); cp.threshold.value = -20; cp.ratio.value = 3; cp.attack.value = 0.005; cp.release.value = 0.09; cp.knee.value = 6;
+  const mk = actx.createGain(); mk.gain.value = 1.6;
+  hp.connect(p1).connect(p2).connect(hs).connect(cp).connect(mk).connect(destino);
+  return hp;
+}
+const RNN_ATRASO = 960 / 48000; // esse build do RNNoise devolve a voz 960 amostras (20 ms) atrasada (medido 11/11)
 function garantirAudio() {
   if (!actx) return;
   if (actx.state !== 'running') actx.resume();
   if (!garantirAudio.ok) { const s = actx.createBufferSource(); s.buffer = actx.createBuffer(1, 1, 22050); s.connect(actx.destination); s.start(0); garantirAudio.ok = true; }
 }
-function agendarBuf(nome, quando, offset, dur, vol) {
+function agendarBuf(nome, quando, offset, dur, vol, fx) {
   const b = bufs[nome]; if (!b || dur <= 0.005 || vol <= 0) return;
-  const s = actx.createBufferSource(), g = actx.createGain(); s.buffer = b;
+  const g = actx.createGain();
   const f = Math.min(0.006, dur / 3);
   g.gain.setValueAtTime(0, quando); g.gain.linearRampToValueAtTime(vol, quando + f);
   g.gain.setValueAtTime(vol, quando + dur - f); g.gain.linearRampToValueAtTime(0, quando + dur);
-  s.connect(g).connect(actx.destination);
-  s.start(quando, Math.max(0, offset), dur); fontes.push(s);
-  s.onended = () => { fontes = fontes.filter((x) => x !== s); };
+  g.connect(fx && fx.voz ? cadeiaVoz(actx.destination) : actx.destination);
+  const nr = fx ? Math.min(1, fx.nr || 0) : 0;
+  if (nr > 0 && !bufsNR[nome]) prepararRuido(nome);
+  const partes = nr > 0 && bufsNR[nome] ? [[b, 1 - nr, offset], [bufsNR[nome], nr, offset + RNN_ATRASO]] : [[b, 1, offset]];
+  for (const [buf, ganho, off] of partes) {
+    if (ganho <= 0) continue;
+    const s = actx.createBufferSource(), gg = actx.createGain(); s.buffer = buf; gg.gain.value = ganho;
+    s.connect(gg).connect(g);
+    s.start(quando, Math.max(0, off), dur); fontes.push(s);
+    s.onended = () => { fontes = fontes.filter((x) => x !== s); };
+  }
 }
+const fxDe = (o) => ({ nr: o.reduzir_ruido || 0, voz: !!o.realcar_voz });
 function tocarSom(nome, vol, offset = 0, dur = null) { // botão "Ouvir"
   garantirAudio(); if (!actx || !bufs[nome]) return;
   agendarBuf(nome, actx.currentTime + 0.02, offset, (dur || bufs[nome].duration) - offset, vol);
@@ -409,12 +493,13 @@ function agendarTudo() {
   for (const x of L.tr) {
     const t = x.t, m = M[t.midia] || {}; if (m.tipo !== 'video' || t.mudo) continue;
     if (x.ini + x.dur <= T0) continue;
-    let ini = Math.max(x.ini, T0);
-    while (ini < x.ini + x.dur - 0.005) { // o trecho pode cruzar pedaços da cópia leve
-      const src = x.de + (ini - x.ini), seg = (m.mapa || []).find((s) => src >= s.a - 0.005 && src < s.b);
+    let ini = Math.max(x.ini, T0), voltas = 0;
+    while (ini < x.ini + x.dur - 0.005 && voltas++ < 100) { // o trecho pode cruzar pedaços da cópia leve
+      // "< s.b - 0.002": no fim exato de um pedaço o arredondamento achava o mesmo pedaço de novo e o laço não andava
+      const src = x.de + (ini - x.ini), seg = (m.mapa || []).find((s) => src >= s.a - 0.005 && src < s.b - 0.002);
       if (!seg) break;
       const dur = Math.min(x.ini + x.dur - ini, seg.b - src);
-      agendarBuf(t.midia, ctx0 + (ini - T0), seg.o + (src - seg.a), dur, t.volume ?? 1);
+      agendarBuf(t.midia, ctx0 + (ini - T0), seg.o + (src - seg.a), dur, t.volume ?? 1, fxDe(t));
       ini += dur;
     }
   }
@@ -427,11 +512,11 @@ function agendarTudo() {
   for (const o of P.sobre) {
     const m = M[o.midia] || {}; if (o.desativado || o.mudo || m.tipo !== 'video') continue;
     const d = durSobre(o); if (o.em + d <= T0) continue;
-    let ini = Math.max(o.em, T0);
-    while (ini < o.em + d - 0.005) {
-      const src = (o.de || 0) + (ini - o.em), seg = (m.mapa || []).find((x) => src >= x.a - 0.005 && src < x.b); if (!seg) break;
+    let ini = Math.max(o.em, T0), voltas = 0;
+    while (ini < o.em + d - 0.005 && voltas++ < 100) {
+      const src = (o.de || 0) + (ini - o.em), seg = (m.mapa || []).find((x) => src >= x.a - 0.005 && src < x.b - 0.002); if (!seg) break;
       const dd = Math.min(o.em + d - ini, seg.b - src);
-      agendarBuf(o.midia, ctx0 + (ini - T0), seg.o + (src - seg.a), dd, o.volume ?? 1); ini += dd;
+      agendarBuf(o.midia, ctx0 + (ini - T0), seg.o + (src - seg.a), dd, o.volume ?? 1, fxDe(o)); ini += dd;
     }
   }
   chaveSom = JSON.stringify([P.trechos, P.sfx, P.sobre]);
@@ -576,7 +661,7 @@ function desenharTimeline() {
   for (const tp of COM_PISTA) for (let k = 0; k < nPistas(tp); k++) rows[tp].push('');
   L.tr.forEach((x, i) => {
     const t = x.t, w = Math.max(6, x.dur * pxs - 2), m = M[t.midia] || {}, vol = t.mudo ? 0 : (t.volume ?? 1);
-    const extra = (t.mudo ? ', mudo' : (vol !== 1 ? `, ${Math.round(vol * 100)}%` : ''));
+    const extra = (t.mudo ? ', mudo' : (vol !== 1 ? `, ${Math.round(vol * 100)}%` : '')) + (!t.mudo && (t.reduzir_ruido || t.realcar_voz) ? ' · voz' : '');
     const ond = m.picos ? onda(m.picos, 40, x.de, x.de + x.dur, w, 18, vol, (ts) => proxyT(t.midia, ts)) : '';
     v += `<div class="bloco b-video${S('trecho', i)}" data-tipo="trecho" data-i="${i}" style="left:${x.ini * pxs}px;width:${w}px">${minis(t, x, w)}${ond}<span class="rot">${esc(t.midia)} ${curto(x.dur)}${extra}</span>${alcas}</div>`;
   });
@@ -590,17 +675,17 @@ function desenharTimeline() {
   P.sobre.forEach((o, i) => {
     const d = durSobre(o), w = Math.max(10, d * pxs - 1);
     const mini = (M[o.midia] || {}).mini ? minis({ midia: o.midia }, { de: o.de || 0 }, w) : '';
-    rows.sobre[o.pista || 0] += `<div class="bloco b-sobre${S('sobre', i)}${OFF(o)}" data-tipo="sobre" data-i="${i}" style="left:${o.em * pxs}px;width:${w}px">${mini}<span class="rot">${esc(o.midia)} ${curto(d)}${o.mudo ? ', mudo' : ''}</span>${alcas}</div>`;
+    rows.sobre[o.pista || 0] += `<div class="bloco b-sobre${S('sobre', i)}${OFF(o)}" data-tipo="sobre" data-i="${i}" style="left:${o.em * pxs}px;width:${w}px">${mini}<span class="rot">${esc(o.midia)} ${curto(d)}${o.mudo ? ', mudo' : (o.reduzir_ruido || o.realcar_voz ? ' · voz' : '')}</span>${alcas}</div>`;
   });
   if (P.balao && P.balao.texto) {
     const bb = P.balao; b = `<div class="bloco b-balao${S('balao', 0)}${OFF(bb)}" data-tipo="balao" data-i="0" style="left:${(bb.de || 0) * pxs}px;width:${Math.max(6, ((bb.ate ?? 3.5) - (bb.de || 0)) * pxs - 1)}px"><span class="rot">${esc(bb.texto)}</span>${alcas}</div>`;
   }
-  const alvoP = arr && arr.pistaAlvo != null ? arr.tipo + ':' + arr.pistaAlvo : '';
+  const alvoP = arr && arr.pistaAlvo != null ? (arr.tipo === 'trecho' ? (arr.virar === 'sobre' ? 'sobre' : '-') : arr.tipo) + ':' + arr.pistaAlvo : '';
   const linhaP = (tp, k, cls) => `<div class="pista ${cls}${rows[tp][k] ? '' : ' vazia'}${alvoP === tp + ':' + k ? ' alvo' : ''}" data-tp="${tp}" data-pista="${k}">${rows[tp][k]}</div>`;
   const NOMES = { sobre: 'Por cima', legenda: 'Texto', sfx: 'Áudio' }, CLS = { sobre: 'h-sobre', legenda: 'h-leg', sfx: 'h-sfx' };
   let corpo = '', cab = '<div style="height:26px"></div>';
   for (let k = rows.sobre.length - 1; k >= 0; k--) { corpo += linhaP('sobre', k, 'h-sobre'); cab += `<div class="h-sobre" style="margin-bottom:4px">${rows.sobre[k] ? NOMES.sobre + (k ? ' ' + (k + 1) : '') : '+ clipe'}</div>`; }
-  corpo += `<div class="pista h-video">${v}</div>`; cab += '<div class="h-video" style="margin-bottom:4px">Vídeo</div>';
+  corpo += `<div class="pista h-video${arr && arr.virar === 'trecho' ? ' alvo' : ''}">${v}</div>`; cab += '<div class="h-video" style="margin-bottom:4px">Vídeo</div>';
   for (const tp of ['legenda', 'sfx']) rows[tp].forEach((r, k) => { corpo += linhaP(tp, k, CLS[tp]); cab += `<div class="${CLS[tp]}" style="margin-bottom:4px">${r || !k ? NOMES[tp] + (k ? ' ' + (k + 1) : '') : '+ ' + NOMES[tp].toLowerCase()}</div>`; });
   corpo += `<div class="pista h-balao">${b}</div>`; cab += '<div class="h-balao">Balão</div>';
   $('cabecas').innerHTML = cab;
@@ -638,8 +723,12 @@ $('trilho').addEventListener('pointermove', (e) => {
   if (!arr.mexeu && Math.abs(e.clientX - arr.x0) < 4) return;
   if (!arr.mexeu) multi = [];
   arr.mexeu = true;
-  if (arr.tipo === 'trecho' && arr.modo === 'mover') return; // trecho só apara pelas pontas
-  if (arr.modo === 'mover' && COM_PISTA.includes(arr.tipo)) { // arrastar pra cima/baixo troca de camada
+  if (arr.modo === 'mover' && (arr.tipo === 'trecho' || arr.tipo === 'sobre')) { // vídeo <-> clipe por cima
+    const sob = (sel_) => [...document.querySelectorAll(sel_)].find((d) => { const r = d.getBoundingClientRect(); return e.clientY >= r.top - 2 && e.clientY < r.bottom + 2; });
+    if (arr.tipo === 'trecho') { const l = sob('.pista[data-tp="sobre"]'); arr.virar = l ? 'sobre' : null; arr.pistaAlvo = l ? +l.dataset.pista : null; }
+    else { const l = sob('.pista.h-video'); arr.virar = l ? 'trecho' : null; }
+  }
+  if (arr.modo === 'mover' && COM_PISTA.includes(arr.tipo) && !arr.virar) { // arrastar pra cima/baixo troca de camada
     const lin = [...document.querySelectorAll(`.pista[data-tp="${arr.tipo}"]`)];
     const alvoL = lin.find((d) => { const r = d.getBoundingClientRect(); return e.clientY >= r.top - 2 && e.clientY < r.bottom + 2; });
     if (alvoL) arr.pistaAlvo = +alvoL.dataset.pista;
@@ -652,9 +741,12 @@ function soltar(e) {
   const a = arr; arr = null; guiaT = null;
   if (a.modo === 'agulha') return;
   if (a.mexeu) {
-    if (COM_PISTA.includes(a.tipo)) { // não deixa dois na mesma camada no mesmo tempo: sobe pra próxima livre
-      const lista = LISTA[a.tipo](), o = lista[a.i]; if (o) { acomodar(a.tipo, o); compactar(a.tipo); lista.sort((x, y) => iv(a.tipo, x)[0] - iv(a.tipo, y)[0]); sel = { tipo: a.tipo, i: lista.indexOf(o) }; }
+    if (sel && COM_PISTA.includes(sel.tipo)) { // não deixa dois na mesma camada no mesmo tempo: sobe pra próxima livre
+      const tp = sel.tipo, lista = LISTA[tp](), o = lista[sel.i]; if (o) { acomodar(tp, o); compactar(tp); lista.sort((x, y) => iv(tp, x)[0] - iv(tp, y)[0]); sel = { tipo: tp, i: lista.indexOf(o) }; }
     }
+    if (a.virar === 'sobre' && sel && sel.tipo === 'sobre') aviso('Virou clipe por cima');
+    if (a.virar === 'trecho' && sel && sel.tipo === 'trecho') aviso('Entrou no vídeo');
+    if (a.tipo === 'sobre' && sel && sel.tipo === 'sobre') compactar('sobre');
     confirmar(a.antes); tudo(); return;
   }
   // clique: seleciona; se a agulha estiver fora do item, leva ela pro começo dele
@@ -703,6 +795,16 @@ function aplicarArraste(dt) {
       s.em = r3(s.em + delta); s.inicio = r3(ini0 + delta); s.duracao = r3(d0 - delta); if (!s.inicio) delete s.inicio;
     } else { const d = Math.min(Math.max(comIma(s.em + durSfx(s) + dt) - s.em, 0.05), maxM - (s.inicio || 0)); s.duracao = r3(d); }
     sel = { tipo: 'sfx', i: arr.i };
+  } else if (arr.tipo === 'sobre' && arr.modo === 'mover' && arr.virar === 'trecho') {
+    const o = P.sobre.splice(arr.i, 1)[0], d = durSobre(o), em = Math.max(0, o.em + dt);
+    const L0 = estrutura(B.trechos); let j = 0; L0.forEach((y) => { if (y.ini + y.dur / 2 < em + Math.min(d, 1) / 2) j++; });
+    const t = { midia: o.midia };
+    if ((M[o.midia] || {}).tipo === 'imagem') t.duracao = r3(d); else { t.de = r3(o.de || 0); t.ate = r3(o.ate); }
+    for (const k of ['volume', 'mudo', 'faixas', 'reduzir_ruido', 'realcar_voz']) if (o[k] != null) t[k] = clone(o[k]);
+    P.trechos.splice(j, 0, t);
+    remapear(B.trechos, P.trechos, (k) => (k < j ? k : k + 1));
+    guiaT = estrutura(P.trechos)[j].ini;
+    sel = { tipo: 'trecho', i: j };
   } else if (arr.tipo === 'sobre') {
     const o = P.sobre[arr.i], m = M[o.midia] || {}, img = m.tipo === 'imagem';
     if (arr.pistaAlvo != null) { if (arr.pistaAlvo) o.pista = arr.pistaAlvo; else delete o.pista; }
@@ -722,6 +824,35 @@ function aplicarArraste(dt) {
     else if (arr.modo === 'ini') b.de = r3(Math.min(Math.max(comIma(de0 + dt), 0), ate0 - 0.1));
     else b.ate = r3(Math.max(Math.min(comIma(ate0 + dt), total), de0 + 0.1));
     sel = { tipo: 'balao', i: 0 };
+  } else if (arr.tipo === 'trecho' && arr.modo === 'mover') {
+    const L0 = estrutura(B.trechos), x0 = L0[arr.i];
+    if (arr.virar === 'sobre' && B.trechos.length > 1) {
+      // legendas e efeitos desse trecho vão junto com ele pra camada de cima (não somem)
+      const dentro = (a0) => a0 >= x0.ini - 1e-6 && a0 < x0.ini + x0.dur - 1e-6;
+      const levaL = P.legendas.filter((l) => dentro(l.de)), levaS = P.sfx.filter((x) => dentro(x.em));
+      P.legendas = P.legendas.filter((l) => !levaL.includes(l)); P.sfx = P.sfx.filter((x) => !levaS.includes(x));
+      const t = P.trechos.splice(arr.i, 1)[0];
+      remapear(B.trechos, P.trechos, (k) => (k < arr.i ? k : k === arr.i ? -1 : k - 1));
+      const tot = linha().total, o = { midia: t.midia, em: r3(Math.min(Math.max(comIma(x0.ini + dt), 0), Math.max(0, tot - x0.dur))), largura: 1080 };
+      const desl = o.em - x0.ini;
+      for (const l of levaL) { const n = { ...l, de: r3(l.de + desl), ate: r3(Math.min(l.ate + desl, tot)) }; if (n.ate - n.de >= 0.05) { acomodar('legenda', n); P.legendas.push(n); } }
+      for (const x of levaS) { const n = { ...x, em: r3(x.em + desl) }; if (n.em < tot) { acomodar('sfx', n); P.sfx.push(n); } }
+      P.legendas.sort((p1, p2) => p1.de - p2.de); P.sfx.sort((p1, p2) => p1.em - p2.em);
+      if ((M[t.midia] || {}).tipo === 'imagem') o.duracao = r3(x0.dur); else { o.de = r3(t.de); o.ate = r3(t.ate); }
+      for (const k of ['volume', 'mudo', 'faixas', 'reduzir_ruido', 'realcar_voz']) if (t[k] != null) o[k] = clone(t[k]);
+      if (arr.pistaAlvo) o.pista = arr.pistaAlvo;
+      P.sobre.push(o); sel = { tipo: 'sobre', i: P.sobre.length - 1 };
+    } else {
+      const centro = x0.ini + x0.dur / 2 + dt; let j = 0;
+      L0.forEach((y, k) => { if (k !== arr.i && y.ini + y.dur / 2 < centro) j++; });
+      if (j !== arr.i) {
+        const ordem = [...Array(B.trechos.length).keys()]; ordem.splice(arr.i, 1); ordem.splice(j, 0, arr.i);
+        P.trechos = ordem.map((k) => clone(B.trechos[k]));
+        remapear(B.trechos, P.trechos, (k) => ordem.indexOf(k));
+      }
+      guiaT = estrutura(P.trechos)[j].ini;
+      sel = { tipo: 'trecho', i: j };
+    }
   } else if (arr.tipo === 'trecho') {
     const t = P.trechos[arr.i], m = M[t.midia] || {};
     if (m.tipo === 'imagem') { if (arr.modo === 'fim') t.duracao = r3(Math.max(0.1, (t.duracao || 1) + dt)); }
@@ -774,6 +905,102 @@ function apagar() {
     sel = null; textoAtual = null; tudo();
   });
 }
+function duplicar() {
+  if (!sel) return aviso('Selecione algo pra duplicar');
+  if (sel.tipo === 'balao') return aviso('Só tem um balão');
+  const tipo = sel.tipo, idx = (multi.length > 1 ? [...multi] : [sel.i]).sort((a, b) => a - b);
+  mudar(() => {
+    if (tipo === 'trecho') { // cópia entra logo depois do original; o resto anda pra frente
+      let novos = 0;
+      for (const k0 of idx) {
+        const k = k0 + novos, velho = clone(P.trechos);
+        P.trechos.splice(k + 1, 0, clone(P.trechos[k]));
+        remapear(velho, P.trechos, (j) => (j <= k ? j : j + 1)); novos++;
+      }
+      sel = { tipo, i: idx[idx.length - 1] + novos }; multi = [];
+    } else {
+      const lista = LISTA[tipo](), total = linha().total, feitos = [];
+      const fim = Math.max(...idx.map((i) => iv(tipo, lista[i])[1])), ini = Math.min(...idx.map((i) => iv(tipo, lista[i])[0]));
+      const desloc = fim + (fim - ini) <= total + 0.01 ? fim - ini : 0; // cabe depois? vai depois; senão, mesma hora numa camada livre
+      for (const i of idx) {
+        const c = clone(lista[i]);
+        if (tipo === 'legenda') { c.de = r3(c.de + desloc); c.ate = r3(c.ate + desloc); } else c.em = r3(c.em + desloc);
+        acomodar(tipo, c); lista.push(c); feitos.push(c);
+      }
+      lista.sort((a, b) => iv(tipo, a)[0] - iv(tipo, b)[0]);
+      sel = { tipo, i: lista.indexOf(feitos[feitos.length - 1]) }; multi = feitos.length > 1 ? feitos.map((c) => lista.indexOf(c)).sort((a, b) => a - b) : [];
+    }
+    textoAtual = null; tudo();
+  });
+  aviso(idx.length > 1 ? `${idx.length} duplicados` : 'Duplicado');
+}
+function telaCheia(ligar) {
+  const pl = document.querySelector('.player'), on = ligar ?? !pl.classList.contains('cheia');
+  pl.classList.toggle('cheia', on);
+  try {
+    if (on && pl.requestFullscreen && !document.fullscreenElement) pl.requestFullscreen().catch(() => {});
+    if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  } catch (e) { }
+  requestAnimationFrame(escalar);
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) { document.querySelector('.player').classList.remove('cheia'); requestAnimationFrame(escalar); } });
+
+// ---------- mídia do computador (Ctrl+O) ----------
+function nomeLivre(arquivo) {
+  let base = arquivo.replace(/\.[^.]+$/, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30) || 'midia';
+  let n = base, k = 2; while (M[n] || (P.midia && P.midia[n])) n = base + '_' + k++;
+  return n;
+}
+function duracaoDe(url, tipo) {
+  return new Promise((ok) => { const e = document.createElement(tipo === 'audio' ? 'audio' : 'video'); e.preload = 'metadata'; e.onloadedmetadata = () => ok(e.duration || 0); e.onerror = () => ok(0); e.src = url; });
+}
+async function registrarMidia(nome, url, tipo, caminho) { // entra na biblioteca da página (M) e no projeto (P.midia)
+  const dur = tipo === 'imagem' ? 0 : await duracaoDe(url, tipo);
+  M[nome] = { tipo, src: url, duracao: dur, local: true };
+  if (tipo === 'video') M[nome].mapa = [{ a: 0, b: dur, o: 0 }];
+  prepararMidia(nome);
+  if (caminho) { P.midia = P.midia || {}; P.midia[nome] = caminho; }
+}
+async function importarArquivos(lista) {
+  const novos = [];
+  for (const f of lista) {
+    const tipo = f.type.startsWith('video') ? 'video' : f.type.startsWith('audio') ? 'audio' : f.type.startsWith('image') ? 'imagem' : null;
+    if (!tipo) { aviso(f.name + ': não é vídeo, áudio nem imagem'); continue; }
+    const nome = nomeLivre(f.name), arq = nome + (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+    const antes = JSON.stringify(P);
+    await registrarMidia(nome, URL.createObjectURL(f), tipo, 'midia/' + arq);
+    confirmar(antes);
+    novos.push({ nome, tipo });
+    if (window.kbEnviarMidia) window.kbEnviarMidia(f, 'midia/' + arq, nome);
+  }
+  if (!novos.length) return;
+  abaSons = novos[novos.length - 1].tipo === 'audio' ? 'sons' : 'clipes';
+  tudo();
+  aviso(novos.length > 1 ? `${novos.length} mídias na biblioteca` : `${novos[0].nome} na biblioteca: ${novos[0].tipo === 'audio' ? '+ agulha pra usar' : '+ no vídeo ou + por cima'}`);
+  if (!window.kbEnviarMidia) setTimeout(() => aviso('Manda esse arquivo no chat junto com o projeto'), 2600);
+}
+$('bt-midia').onclick = () => $('arq-midia').click();
+$('arq-midia').onchange = (e) => { const fs = [...e.target.files]; e.target.value = ''; importarArquivos(fs); };
+document.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+document.addEventListener('drop', (e) => { if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); importarArquivos([...e.dataTransfer.files]); } });
+function inserirNoVideo(nome) { // na agulha: se cair no meio de um trecho, divide ele e entra entre os dois
+  const m = M[nome] || {};
+  mudar(() => {
+    let L = linha(), k = trechoEm(T, L.tr, false), x = L.tr[k], j;
+    if (!x) j = 0;
+    else if (T - x.ini < 0.05) j = k;
+    else if (x.ini + x.dur - T < 0.05 || m.tipo === 'imagem' && (M[x.t.midia] || {}).tipo === 'imagem') j = k + 1;
+    else if ((M[x.t.midia] || {}).tipo === 'imagem') j = k + 1;
+    else { const t = P.trechos[k], b = clone(t), c = r3(x.de + (T - x.ini)); t.ate = c; b.de = c; P.trechos.splice(k + 1, 0, b); j = k + 1; }
+    const t = { midia: nome };
+    if (m.tipo === 'imagem') t.duracao = 2; else { const seg = (m.mapa || [])[0] || { a: 0, b: 3 }; t.de = r3(seg.a); t.ate = r3(seg.b); }
+    const velho = clone(P.trechos); P.trechos.splice(j, 0, t);
+    remapear(velho, P.trechos, (i) => (i < j ? i : i + 1));
+    sel = { tipo: 'trecho', i: j }; multi = []; textoAtual = null; tudo();
+  });
+  aviso(`${nome} entrou no vídeo em ${curto(T)}`);
+}
+
 function alternarDesativado() {
   const itens = selecionados().filter((x) => x.tipo !== 'trecho');
   if (!itens.length) return aviso(sel ? 'Trecho de vídeo não desativa: use Sem som ou apague' : 'Selecione legenda, SFX ou balão');
@@ -814,11 +1041,11 @@ function sons() {
   let corpo = '';
   if (abaSons === 'sons') {
     corpo = lista.length ? `<div class="lista">${lista.map(([n, m]) => `<div class="item-som"><button class="icone" data-ouvir="${esc(n)}" title="Ouvir"><svg><use href="#i-ouvir"/></svg></button><span>${esc(n)} <small>${curto(Math.min(m.duracao || 0, 12))}</small></span><button class="add" data-add="${esc(n)}">+ agulha</button></div>`).join('')}</div>`
-      : '<p class="vazio">Nenhum som neste projeto. Pede pro King Bot pôr os sons da pasta.</p>';
+      : '<p class="vazio">Nenhum som neste projeto. Botão Mídia (ou Ctrl+O) pra puxar do computador.</p>';
   } else if (abaSons === 'clipes') {
     const cl = Object.entries(M).filter(([, m]) => m.tipo === 'video' || m.tipo === 'imagem');
-    corpo = cl.length ? `<div class="lista">${cl.map(([n, m]) => `<div class="item-som"><span>${esc(n)} <small>${m.tipo === 'imagem' ? 'imagem' : curto((m.mapa || []).reduce((t, x) => t + x.b - x.a, 0))}</small></span><button class="add" data-sobre="${esc(n)}">+ por cima</button></div>`).join('')}</div>`
-      : '<p class="vazio">Nenhum clipe neste projeto.</p>';
+    corpo = cl.length ? `<div class="lista">${cl.map(([n, m]) => `<div class="item-som"><span>${esc(n)} <small>${m.tipo === 'imagem' ? 'imagem' : curto((m.mapa || []).reduce((t, x) => t + x.b - x.a, 0))}</small></span><span style="display:flex;gap:4px"><button class="add" data-video="${esc(n)}">+ no vídeo</button><button class="add" data-sobre="${esc(n)}">+ por cima</button></span></div>`).join('')}</div>`
+      : '<p class="vazio">Nenhum clipe neste projeto. Botão Mídia (ou Ctrl+O) pra puxar do computador.</p>';
   } else {
     corpo = `<div class="lista"><button data-acao="add-leg">+ Texto na agulha</button>${P.balao ? '' : '<button data-acao="add-balao">+ Balão no topo</button>'}<button data-acao="estilo">Estilo das legendas</button></div>`;
   }
@@ -830,6 +1057,7 @@ $('sons').addEventListener('click', (e) => {
   if (b.dataset.ouvir) { garantirAudio(); return tocarSom(b.dataset.ouvir, 1); }
   if (b.dataset.add) return addSfx(b.dataset.add);
   if (b.dataset.sobre) return addSobre(b.dataset.sobre);
+  if (b.dataset.video) return inserirNoVideo(b.dataset.video);
   if (b.dataset.acao === 'add-leg') return addLegenda();
   if (b.dataset.acao === 'add-balao') return mudar(() => { P.balao = { texto: 'Texto do balão', de: 0, ate: Math.min(3.5, linha().total) }; sel = { tipo: 'balao', i: 0 }; textoAtual = null; tudo(); });
   if (b.dataset.acao === 'estilo') { sel = null; tudo(); }
@@ -849,6 +1077,7 @@ function props() {
     el.innerHTML = `<h2>${multi.length} ${nomes[sel.tipo]}</h2>
       ${sel.tipo !== 'legenda' ? barra('Volume', 'volume', v0, 0, 200, 1, pct) : ''}
       ${sel.tipo === 'trecho' ? `<label class="alternar"><input type="checkbox" data-c="mudo" ${itens.every((o) => o.mudo) ? 'checked' : ''}> Sem som</label>` : `<label class="alternar"><input type="checkbox" data-c="desativado" ${todosOff ? 'checked' : ''}> Desativados</label>`}
+      ${sel.tipo === 'trecho' || sel.tipo === 'sobre' ? `${barra('Reduzir ruído', 'reduzir_ruido', Math.round(((itens[0] || {}).reduzir_ruido || 0) * 100), 0, 100, 5, (v) => (v ? v + '%' : 'não'))}<label class="alternar"><input type="checkbox" data-c="realcar_voz" ${itens.every((o) => o.realcar_voz) ? 'checked' : ''}> Realçar voz</label>` : ''}
       <div class="linha-botoes">${multi.length < lista.length ? `<button data-todos>Selecionar todos (${lista.length})</button>` : ''}<button data-limpar>Só um</button></div>`;
     return;
   }
@@ -879,6 +1108,8 @@ function props() {
     el.innerHTML = `<h2>Vídeo: ${esc(t.midia)}</h2>
       ${barra('Volume', 'volume', Math.round((t.volume ?? 1) * 100), 0, 200, 1, pct)}
       <label class="alternar"><input type="checkbox" data-c="mudo" ${t.mudo ? 'checked' : ''}> Sem som</label>
+      ${barra('Reduzir ruído', 'reduzir_ruido', Math.round((t.reduzir_ruido || 0) * 100), 0, 100, 5, (v) => (v ? v + '%' : 'não'))}
+      <label class="alternar"><input type="checkbox" data-c="realcar_voz" ${t.realcar_voz ? 'checked' : ''}> Realçar voz</label>
       ${barra('Zoom', 'zoom', Math.round((t.zoom || 1) * 100), 100, 250, 1, pct)}
       <label>Encaixe<select data-c="encaixe"><option value="">Cobrir a tela</option><option value="borrado" ${t.encaixe === 'borrado' ? 'selected' : ''}>Inteiro, fundo borrado</option><option value="conter" ${t.encaixe === 'conter' ? 'selected' : ''}>Inteiro, faixas pretas</option></select></label>
       ${m.tipo === 'imagem' ? `<label>Duração (s)<input type="number" step="0.05" data-c="duracao" value="${n3(t.duracao || 1)}"></label>` :
@@ -896,7 +1127,8 @@ function props() {
       ${barra('Tamanho', 'largura', Math.round(o.largura || 1080), 100, 1080, 10, (v) => v)}
       ${barra('Esquerda', 'x', Math.round(o.x || 0), -540, 1080, 5, (v) => v)}
       ${barra('Altura', 'ytopo', Math.round(o.y ?? -1), -1, 1900, 5, (v) => (v < 0 ? 'centro' : v))}
-      ${m.tipo === 'video' ? barra('Volume', 'volume', Math.round((o.volume ?? 1) * 100), 0, 200, 1, pct) + `<label class="alternar"><input type="checkbox" data-c="mudo" ${o.mudo ? 'checked' : ''}> Sem som</label>` : ''}
+      ${m.tipo === 'video' ? barra('Volume', 'volume', Math.round((o.volume ?? 1) * 100), 0, 200, 1, pct) + `<label class="alternar"><input type="checkbox" data-c="mudo" ${o.mudo ? 'checked' : ''}> Sem som</label>` + `${barra('Reduzir ruído', 'reduzir_ruido', Math.round((o.reduzir_ruido || 0) * 100), 0, 100, 5, (v) => (v ? v + '%' : 'não'))}
+      <label class="alternar"><input type="checkbox" data-c="realcar_voz" ${o.realcar_voz ? 'checked' : ''}> Realçar voz</label>` : ''}
       <div class="grade2"><label>Entra em (s)<input type="number" step="0.01" data-c="em" value="${n3(o.em)}"></label>
       ${m.tipo === 'imagem' ? `<label>Duração (s)<input type="number" step="0.05" data-c="duracao" value="${n3(o.duracao || 2)}"></label>` : `<label>Começa no original (s)<input type="number" step="0.01" data-c="de" value="${n3(o.de || 0)}"></label>`}</div>`;
   } else if (sel.tipo === 'balao') {
@@ -911,7 +1143,7 @@ function aplicar(c, v) {
   if (sel && multi.length > 1) {
     const lista = LISTA[sel.tipo]();
     for (const i of multi) { const o = lista[i]; if (!o) continue;
-      if (c === 'volume') o.volume = v / 100; else if (v) o[c] = true; else delete o[c]; }
+      if (c === 'volume') o.volume = v / 100; else if (c === 'reduzir_ruido') { if (v > 0) o.reduzir_ruido = v / 100; else delete o.reduzir_ruido; } else if (v) o[c] = true; else delete o[c]; }
     textoAtual = null; return;
   }
   const o = alvo(); if (!o) return;
@@ -926,7 +1158,8 @@ function aplicar(c, v) {
   if (sel.tipo === 'sobre' && c === 'ytopo') { if (v < 0) delete o.y; else o.y = v; return; }
   if (sel.tipo === 'sobre' && c === 'de') { const d = durSobre(o); o.de = r3(Math.max(0, v)); o.ate = r3(o.de + d); return; }
   if (c === 'volume' || c === 'zoom') { v = v / 100; if (c === 'zoom' && v === 1) { delete o.zoom; return; } }
-  if ((c === 'mudo' || c === 'desativado') && !v) { delete o[c]; textoAtual = null; return; }
+  if (c === 'reduzir_ruido') { if (v > 0) o.reduzir_ruido = v / 100; else delete o.reduzir_ruido; return; }
+  if ((c === 'mudo' || c === 'desativado' || c === 'realcar_voz') && !v) { delete o[c]; textoAtual = null; return; }
   if (c === 'encaixe' && !v) { delete o.encaixe; return; }
   o[c] = v;
   if (sel.tipo === 'legenda') { if (o.ate <= o.de) o.ate = r3(o.de + 0.1); P.legendas.sort((a, b) => a.de - b.de); sel.i = P.legendas.indexOf(o); }
@@ -939,7 +1172,7 @@ $('props').addEventListener('input', (e) => {
   if (e.target.tagName === 'TEXTAREA' || tp === 'range' || tp === 'color') {
     abrirPendente();
     aplicar(c, tp === 'range' ? +e.target.value : e.target.value);
-    if (tp === 'range') { const o = e.target.parentElement.querySelector('output'); if (o) o.textContent = c.includes('tam') ? e.target.value + 'px' : (c === 'volume' || c === 'zoom') ? e.target.value + '%' : (c === 'ytopo' && +e.target.value < 0) ? 'centro' : e.target.value; }
+    if (tp === 'range') { const o = e.target.parentElement.querySelector('output'); if (o) o.textContent = c.includes('tam') ? e.target.value + 'px' : (c === 'volume' || c === 'zoom') ? e.target.value + '%' : c === 'reduzir_ruido' ? (+e.target.value ? e.target.value + '%' : 'não') : (c === 'ytopo' && +e.target.value < 0) ? 'centro' : e.target.value; }
     desenharTimeline();
   }
 });
@@ -961,6 +1194,8 @@ $('bt-desfazer').onclick = desfazer;
 $('bt-refazer').onclick = refazer;
 $('bt-split').onclick = dividir;
 $('bt-apagar').onclick = apagar;
+$('bt-duplicar').onclick = duplicar;
+$('bt-cheia').onclick = () => telaCheia();
 $('bt-olho').onclick = alternarDesativado;
 $('bt-varios').onclick = () => { modoVarios = !modoVarios; $('bt-varios').classList.toggle('on', modoVarios); aviso(modoVarios ? 'Toque nos blocos pra juntar na seleção' : 'Seleção simples'); };
 function zoom(v) { const r = $('rolagem'), centro = (r.scrollLeft + r.clientWidth / 2) / pxs; pxs = Math.min(300, Math.max(20, v)); $('zoom').value = pxs; desenharTimeline(); r.scrollLeft = centro * pxs - r.clientWidth / 2; }
@@ -979,15 +1214,18 @@ $('bt-baixar').onclick = () => {
 document.addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (mod && k === 's') { e.preventDefault(); return $('bt-baixar').onclick(); }
+  if (mod && k === 'o') { e.preventDefault(); return $('arq-midia').click(); }
   if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); return desfazer(); }
   if (mod && ((k === 'z' && e.shiftKey) || k === 'y')) { e.preventDefault(); return refazer(); }
   if (document.activeElement.matches('textarea, input:not([type=range]):not([type=checkbox]), select')) return;
   if (e.code === 'Space') { e.preventDefault(); tocando ? parar() : tocar(); }
   else if (mod && k === 'b') { e.preventDefault(); dividir(); }
+  else if (mod && k === 'd') { e.preventDefault(); duplicar(); }
+  else if (!mod && k === 'f') { telaCheia(); }
   else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); apagar(); }
   else if (mod && k === 'a') { e.preventDefault(); selecionarTodos(); }
   else if (!mod && k === 'h') { alternarDesativado(); }
-  else if (e.key === 'Escape') { sel = null; multi = []; tudo(); }
+  else if (e.key === 'Escape') { if (document.querySelector('.player.cheia')) telaCheia(false); else { sel = null; multi = []; tudo(); } }
   else if (e.key === 'ArrowLeft') { parar(); irPara(T - 1 / FPS); }
   else if (e.key === 'ArrowRight') { parar(); irPara(T + 1 / FPS); }
 });
@@ -1006,7 +1244,7 @@ function sujo() { return JSON.stringify(P) !== ultimoBaixado; }
 (function recuperar() {
   let salvo = null;
   try { salvo = localStorage.getItem(CHAVE); } catch (e) { }
-  if (salvo && salvo !== ORIGINAL) {
+  if (salvo && salvo !== ORIGINAL && !window.__SEM_RECUPERAR) { // online: o GitHub é a versão certa
     try { pilhaD.push(JSON.stringify(P)); P = JSON.parse(salvo); setTimeout(() => aviso('Voltei na tua edição de antes (Ctrl+Z volta pro original)'), 300); } catch (e) { }
   }
 })();
@@ -1049,6 +1287,13 @@ requestAnimationFrame(() => { const L = linha(); pxs = Math.min(300, Math.max(20
       <div class="erro" id="erro-projetos"></div>
       <div class="linha"><button id="bt-sair">Trocar token</button></div>
     </div>
+    <div class="cartao" id="bloco-novo" hidden>
+      <label for="novo-nome">Novo projeto</label>
+      <input type="text" id="novo-nome" placeholder="nome (ex.: chileno_v1)" autocomplete="off" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:15px">
+      <div class="linha"><input type="file" id="novo-video" accept="video/*"></div>
+      <div class="linha"><button class="principal" id="bt-novo">Criar</button><span class="fraco" id="novo-estado"></span></div>
+      <div class="erro" id="erro-novo"></div>
+    </div>
     <div class="cartao">
       <label>Ou abre um editor.html que veio no chat</label>
       <input type="file" id="arquivo" accept=".html,.json">
@@ -1059,7 +1304,9 @@ requestAnimationFrame(() => { const L = linha(); pxs = Math.min(300, Math.max(20
 <script>
 const NUVEM = { dono: 'zaza-delas', repo: 'editor-video-projetos', ramo: 'main' };
 const API = `https://api.github.com/repos/${NUVEM.dono}/${NUVEM.repo}`;
-const nuvem = { modo: null, nome: null, sha: null, shaMidias: null, salvando: false, timer: null, ultimoLido: null };
+const nuvem = { modo: null, nome: null, sha: null, shaMidias: null, salvando: false, timer: null, ultimoLido: null, enviando: 0 };
+const locais = {}; // arquivos que vieram deste computador nesta sessão (não baixa de volta do GitHub)
+const LIMITE_MB = 95; // o GitHub recusa arquivo acima de 100 MB
 const $$ = (id) => document.getElementById(id);
 const tokenSalvo = () => { try { return localStorage.getItem('kbeditor:token') || ''; } catch (e) { return ''; } };
 const b64txt = (b) => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\n/g, '')), (c) => c.charCodeAt(0)));
@@ -1072,13 +1319,29 @@ async function gh(caminho, opc = {}) {
     body: opc.body ? JSON.stringify(opc.body) : undefined,
   });
   if (!r.ok) { const e = new Error('GitHub ' + r.status); e.status = r.status; try { e.info = await r.json(); } catch (x) { } throw e; }
-  return opc.raw ? r.text() : r.json();
+  return opc.blob ? r.blob() : opc.raw ? r.text() : r.json();
 }
+function arquivoB64(f) { return new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = erro; r.readAsDataURL(f); }); }
+function enviarArquivo(caminho, conteudoB64, msg, progresso, sha) { // XHR pra ter o progresso do envio
+  return new Promise((ok, erro) => {
+    const x = new XMLHttpRequest(); x.open('PUT', API + caminho);
+    x.setRequestHeader('Authorization', 'Bearer ' + tokenSalvo()); x.setRequestHeader('Accept', 'application/vnd.github+json');
+    x.upload.onprogress = (e) => { if (e.lengthComputable && progresso) progresso(Math.round(e.loaded * 100 / e.total)); };
+    x.onload = () => (x.status < 300 ? ok(JSON.parse(x.responseText)) : erro(Object.assign(new Error('GitHub ' + x.status), { status: x.status })));
+    x.onerror = () => erro(new Error('sem rede'));
+    x.send(JSON.stringify({ message: msg, content: conteudoB64, branch: NUVEM.ramo, ...(sha ? { sha } : {}) }));
+  });
+}
+function duracaoMidia(url, tipo) {
+  return new Promise((ok) => { if (tipo === 'imagem') return ok(0); const e = document.createElement(tipo === 'audio' ? 'audio' : 'video'); e.preload = 'metadata'; e.onloadedmetadata = () => ok(e.duration || 0); e.onerror = () => ok(0); e.src = url; });
+}
+const tipoPorNome = (n) => (/\.(mp4|mov|webm|mkv|m4v)$/i.test(n) ? 'video' : /\.(mp3|wav|m4a|aac|ogg|opus|flac)$/i.test(n) ? 'audio' : /\.(png|jpe?g|webp|gif)$/i.test(n) ? 'imagem' : null);
+const slug = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
 const pasta = (nome) => '/contents/projetos/' + encodeURIComponent(nome);
 
 async function telaInicio() {
   const tk = tokenSalvo();
-  $$('bloco-token').hidden = !!tk; $$('bloco-projetos').hidden = !tk;
+  $$('bloco-token').hidden = !!tk; $$('bloco-projetos').hidden = !tk; $$('bloco-novo').hidden = !tk;
   if (!tk) return;
   try {
     let itens;
@@ -1126,11 +1389,23 @@ async function abrirNuvem(nome) {
   try {
     const lista = await gh(pasta(nome));
     const arq = Object.fromEntries(lista.map((x) => [x.name, x]));
-    if (!arq['projeto.json'] || !arq['midias.json']) throw new Error('projeto incompleto no repo');
-    const [proj, midias] = await Promise.all([gh(pasta(nome) + '/projeto.json'), gh(pasta(nome) + '/midias.json', { raw: true })]);
-    nuvem.modo = 'nuvem'; nuvem.nome = nome; nuvem.sha = proj.sha; nuvem.shaMidias = arq['midias.json'].sha;
+    if (!arq['projeto.json']) throw new Error('projeto sem projeto.json no repo');
+    const [proj, midiasTxt] = await Promise.all([gh(pasta(nome) + '/projeto.json'), arq['midias.json'] ? gh(pasta(nome) + '/midias.json', { raw: true }) : '{}']);
+    nuvem.modo = 'nuvem'; nuvem.nome = nome; nuvem.sha = proj.sha; nuvem.shaMidias = arq['midias.json'] ? arq['midias.json'].sha : null;
     nuvem.ultimoLido = b64txt(proj.content);
-    iniciarEditor({ projeto: JSON.parse(nuvem.ultimoLido), midias: JSON.parse(midias) });
+    const projeto = JSON.parse(nuvem.ultimoLido), midias = JSON.parse(midiasTxt);
+    // mídia que veio do computador do Zaza e o King Bot ainda não transformou em mídia leve
+    const noRepo = arq['midia'] ? (await gh(pasta(nome) + '/midia').catch(() => [])).map((x) => 'midia/' + x.name) : [];
+    for (const [n, cam] of Object.entries(projeto.midia || {})) {
+      const c = typeof cam === 'string' ? cam : cam && cam.arquivo, tipo = c && tipoPorNome(c);
+      if (midias[n] || !tipo || !(locais[nome + '/' + c] || noRepo.includes(c))) continue;
+      $$('lista-projetos').innerHTML = '<span class="fraco">Baixando ' + esc0(c) + '...</span>';
+      const url = locais[nome + '/' + c] || URL.createObjectURL(await gh(pasta(nome) + '/' + c.split('/').map(encodeURIComponent).join('/'), { raw: true, blob: true }));
+      const dur = await duracaoMidia(url, tipo);
+      midias[n] = { tipo, src: url, duracao: dur, local: true, ...(tipo === 'video' ? { mapa: [{ a: 0, b: dur, o: 0 }] } : {}) };
+    }
+    window.__SEM_RECUPERAR = true;
+    iniciarEditor({ projeto, midias });
   } catch (e) {
     $$('erro-projetos').textContent = 'Não abriu: ' + e.message; telaInicio();
   }
@@ -1142,14 +1417,67 @@ function iniciarEditor(dados) {
   s.textContent = $$('principal').textContent;
   $$('inicio').remove();
   document.body.appendChild(s);
-  if (nuvem.modo === 'nuvem') ligarNuvem(); else $('bt-baixar').textContent = 'Baixar projeto';
+  if (nuvem.modo === 'nuvem') { ligarNuvem(); window.kbEnviarMidia = enviarMidia; } else $('bt-baixar').textContent = 'Baixar projeto';
+  const bm = $('bt-menu'); bm.hidden = false;
+  bm.onclick = async () => { // volta pra lista de projetos (salva antes)
+    if (nuvem.modo === 'nuvem') { clearTimeout(nuvem.timer); while (nuvem.enviando) await new Promise((ok) => setTimeout(ok, 300)); await salvar(); if (sujo() && !confirm('Não consegui salvar no GitHub. Sair mesmo assim?')) return; }
+    else if (sujo() && !confirm('Sair sem baixar o projeto? A edição fica guardada neste navegador.')) return;
+    ultimoBaixado = JSON.stringify(P); location.href = location.pathname;
+  };
 }
+
+// ---------- mídia do computador vai pro repo ----------
+async function enviarMidia(f, caminho, nomeMidia) {
+  if (f.size > LIMITE_MB * 1e6) { aviso(`${f.name} tem ${Math.round(f.size / 1e6)} MB: o GitHub só aceita até ${LIMITE_MB}. Fica só nesta sessão; manda no chat.`); return; }
+  locais[nuvem.nome + '/' + caminho] = M[nomeMidia] && M[nomeMidia].src;
+  nuvem.enviando++;
+  try {
+    marcar('enviando ' + f.name + '...');
+    await enviarArquivo(pasta(nuvem.nome) + '/' + caminho.split('/').map(encodeURIComponent).join('/'), await arquivoB64(f), 'mídia do Zaza: ' + f.name, (p) => marcar(`enviando ${f.name} ${p}%`));
+    marcar('mídia enviada ✓');
+  } catch (e) { aviso('Não enviou ' + f.name + ' (' + e.message + ')'); marcar('mídia não enviada'); }
+  nuvem.enviando--;
+  clearTimeout(nuvem.timer); nuvem.timer = setTimeout(salvar, 500);
+}
+
+// ---------- projeto novo, direto do site ----------
+$$('bt-novo').onclick = async () => {
+  const nome = slug($$('novo-nome').value), f = $$('novo-video').files[0], E = (t) => { $$('erro-novo').textContent = t; };
+  E('');
+  if (!nome) return E('Põe um nome.');
+  if (!f) return E('Escolhe o vídeo.');
+  if (f.size > LIMITE_MB * 1e6) return E(`Esse vídeo tem ${Math.round(f.size / 1e6)} MB e o GitHub só aceita até ${LIMITE_MB} MB. Corta antes ou manda no chat.`);
+  const bt = $$('bt-novo'), st = (t) => { $$('novo-estado').textContent = t; };
+  bt.disabled = true;
+  try {
+    try { await gh(pasta(nome)); return E('Já existe um projeto com esse nome.'); } catch (e) { if (e.status !== 404) throw e; }
+    const ext = (f.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase(), caminho = 'midia/bruto' + ext, url = URL.createObjectURL(f);
+    const dur = await duracaoMidia(url, 'video');
+    if (!dur) return E('Não consegui ler esse vídeo.');
+    st('enviando o vídeo 0%');
+    await enviarArquivo(pasta(nome) + '/' + caminho, await arquivoB64(f), 'projeto novo: ' + nome, (p) => st(`enviando o vídeo ${p}%`));
+    locais[nome + '/' + caminho] = url;
+    st('criando o projeto...');
+    const projeto = { nome, formato: { largura: 1080, altura: 1920, fps: 30, lufs: -14 }, midia: { bruto: caminho },
+      trechos: [{ midia: 'bruto', de: 0, ate: Math.round(dur * 1000) / 1000 }], legendas: [] };
+    await gh(pasta(nome) + '/projeto.json', { method: 'PUT', body: { message: 'projeto novo: ' + nome, content: txtb64(JSON.stringify(projeto, null, 2) + '\n'), branch: NUVEM.ramo } });
+    let ind = [], shaInd;
+    try { const r = await gh('/contents/projetos/indice.json'); shaInd = r.sha; ind = JSON.parse(b64txt(r.content)); } catch (e) { if (e.status !== 404) throw e; }
+    const agora = new Date(), q2 = (n) => String(n).padStart(2, '0');
+    ind = [{ nome, quando: `${q2(agora.getDate())}/${q2(agora.getMonth() + 1)} ${q2(agora.getHours())}:${q2(agora.getMinutes())}` }, ...ind.filter((x) => x.nome !== nome)];
+    await gh('/contents/projetos/indice.json', { method: 'PUT', body: { message: 'índice: ' + nome, content: txtb64(JSON.stringify(ind, null, 1)), branch: NUVEM.ramo, ...(shaInd ? { sha: shaInd } : {}) } });
+    history.replaceState(null, '', '?p=' + encodeURIComponent(nome));
+    abrirNuvem(nome);
+  } catch (e) { E('Não criou: ' + e.message); st(''); }
+  bt.disabled = false;
+};
 
 // ---------- salvar no repo e puxar o que o King Bot mudar ----------
 function normal(p) { p.legendas = p.legendas || []; p.sfx = p.sfx || []; p.estilo = p.estilo || {}; p.sobre = p.sobre || []; return p; }
 function marcar(txt) { const e = $$('estado-nuvem'); if (e) e.textContent = txt; }
 async function salvar(forcar) {
   if (nuvem.salvando) return;
+  if (nuvem.enviando && !forcar) { clearTimeout(nuvem.timer); nuvem.timer = setTimeout(salvar, 1500); return; }
   fecharPendente();
   const txt = JSON.stringify(P, null, 2) + '\n';
   if (!forcar && JSON.stringify(P) === ultimoBaixado) return marcar('salvo ✓');
@@ -1170,11 +1498,11 @@ async function salvar(forcar) {
   nuvem.salvando = false;
 }
 async function puxar() {
-  if (nuvem.salvando || document.hidden) return;
+  if (nuvem.salvando || nuvem.enviando || document.hidden) return;
   try {
     const lista = await gh(pasta(nuvem.nome));
     const pj = lista.find((x) => x.name === 'projeto.json'), md = lista.find((x) => x.name === 'midias.json');
-    if (md && md.sha !== nuvem.shaMidias) {
+    if (md && md.sha !== nuvem.shaMidias && !nuvem.enviando) {
       if (!sujo()) { aviso('O King Bot mandou mídia nova: recarregando'); setTimeout(() => location.reload(), 900); }
       else marcar('mídia nova no GitHub: salva e recarrega');
       return;
@@ -1210,6 +1538,6 @@ function ligarNuvem() {
 })();
 </script>
 
-<!-- editor v7.15 -->
+<!-- editor v7.16 -->
 </body>
 </html>

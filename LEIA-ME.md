@@ -113,6 +113,13 @@ Isso evita recodificar o vídeo inteiro antes de começar (era o passo mais lent
 - A página salva sozinha 3 s depois de cada mudança e puxa o que mudou no repo a cada 10 s; se os dois mexeram ao mesmo tempo, ela pergunta antes de sobrescrever.
 - Token: `EDITOR_GITHUB_TOKEN` ou `.segredos/github_token` numa pasta acima do motor. Só o code guide tem; nunca vai no pacote compartilhado.
 
+## v7.16 (11/11, pedido do Zaza)
+- Trecho e clipe por cima ganharam `"reduzir_ruido": 0-1` (força do RNNoise, `motor/modelos/cb.rnnn`, atraso de 10 ms já compensado) e `"realcar_voz": true` (highpass + EQ de presença + compressor + de-esser). Na página: barra "Reduzir ruído" e "Realçar voz" no trecho, no clipe e na seleção múltipla; a prévia usa o RNNoise no navegador (precisa de internet na 1ª vez).
+- Página: arrastar trecho de vídeo pros lados reordena (legendas e efeitos andam junto com o conteúdo); arrastar trecho pra linha "Por cima" vira clipe por cima (levando as legendas dele); arrastar clipe por cima pra linha do vídeo vira trecho. Duplicar qualquer coisa (Ctrl+D / botão). Tela cheia (F / botão no player).
+- Mídia do computador: botão Mídia, Ctrl+O ou arrastar arquivo pra página. Online, o arquivo sobe pro repo em `projetos/<nome>/midia/` (até 95 MB) e entra em `P.midia`; na lista de Clipes tem "+ no vídeo" (divide o trecho na agulha e entra no meio) e "+ por cima".
+- Site: botão "<" volta pros projetos (salva antes); "Novo projeto" cria direto do site com um vídeo do PC (um trecho com o vídeo inteiro). Do lado do King Bot: `python3 motor/nuvem.py baixar <nome> [--pasta DIR]` traz o projeto e a mídia; `subir` depois gera a mídia leve.
+- Corrigido: o som da prévia podia travar a página (laço sem fim) quando um trecho começava no fim exato de um pedaço da cópia leve.
+
 ## Fontes
 
 Montserrat, Poppins, Oswald, Anton, Bebas Neue, Bangers, Luckiest Guy, Archivo Black, Lilita One, Permanent Marker. TTFs em `fontes/` (render) e as mesmas via Google Fonts na página. Fonte nova: pôr em `FONTES` do `motor/baixar_fontes.py`, rodar, e acrescentar no `<link>` e na lista `FONTES` do `editor_modelo.html`. Emoji: Noto Color Emoji nos dois (no Windows o Chrome não tem bandeira sem isso).

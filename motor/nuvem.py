@@ -9,6 +9,7 @@ Projetos: repo PRIVADO zaza-delas/editor-video-projetos, em projetos/<nome>/
 Uso:
   python3 motor/nuvem.py subir  pasta/projeto.json [--folga 1.5] [--sem-midia]
   python3 motor/nuvem.py baixar pasta/projeto.json     # traz a edição do site (guarda a local em projeto.antes_nuvem.json)
+  python3 motor/nuvem.py baixar <nome> [--pasta DIR]   # projeto criado no site: baixa json + mídia (padrão projetos/<nome>)
   python3 motor/nuvem.py lista
   python3 motor/nuvem.py site                          # publica a página + o motor no repo público
 
@@ -69,8 +70,8 @@ def clone(repo):
         if r.returncode:
             sys.exit("ERRO clone: " + r.stderr.replace(token(), "***"))
     git(pasta, "remote", "set-url", "origin", url)
-    git(pasta, "config", "user.name", "King Bot (code guide)")
-    git(pasta, "config", "user.email", "kingbot@users.noreply.github.com")
+    git(pasta, "config", "user.name", "zaza-delas")
+    git(pasta, "config", "user.email", "261479457+zaza-delas@users.noreply.github.com")
     git(pasta, "fetch", "-q", "origin")
     git(pasta, "reset", "-q", "--hard", "origin/main")
     return pasta
@@ -141,13 +142,39 @@ def subir(caminho, folga, sem_midia):
     print(f"{SITE}?p={nome}")
 
 
-def baixar(caminho):
-    local = json.load(open(caminho, encoding="utf-8"))
-    nome = local.get("nome") or os.path.basename(os.path.dirname(os.path.abspath(caminho)))
+def trazer_midia(repo, nome, pasta_local):
+    """Mídia que o Zaza puxou do computador no site (projetos/<nome>/midia/) vem pra pasta local."""
+    origem = os.path.join(repo, "projetos", nome, "midia")
+    vindos = []
+    if os.path.isdir(origem):
+        for n in sorted(os.listdir(origem)):
+            src, dst = os.path.join(origem, n), os.path.join(pasta_local, "midia", n)
+            if os.path.exists(dst) and os.path.getsize(dst) == os.path.getsize(src):
+                continue
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy(src, dst)
+            vindos.append(n)
+    return vindos
+
+
+def baixar(alvo, pasta=None):
+    """alvo = projeto.json local, ou o nome de um projeto criado no site (vai pra --pasta ou projetos/<nome>)."""
     repo = clone(REPO_PROJ)
+    if os.path.isfile(alvo):
+        caminho = alvo
+        local = json.load(open(caminho, encoding="utf-8"))
+        nome = local.get("nome") or os.path.basename(os.path.dirname(os.path.abspath(caminho)))
+    else:
+        nome = alvo
+        caminho = os.path.join(pasta or os.path.join(RAIZ, "projetos", nome), "projeto.json")
+        local = json.load(open(caminho, encoding="utf-8")) if os.path.exists(caminho) else {}
     arq = os.path.join(repo, "projetos", nome, "projeto.json")
     if not os.path.exists(arq):
-        sys.exit(f"ERRO: {nome} não está no GitHub (rode subir antes)")
+        sys.exit(f"ERRO: {nome} não está no GitHub")
+    os.makedirs(os.path.dirname(os.path.abspath(caminho)), exist_ok=True)
+    vindos = trazer_midia(repo, nome, os.path.dirname(os.path.abspath(caminho)))
+    if vindos:
+        print(f"mídia do site: {', '.join(vindos)}")
     remoto = json.load(open(arq, encoding="utf-8"))
     from editor import CAMPOS
     novo = dict(remoto)
@@ -158,11 +185,12 @@ def baixar(caminho):
         print("igual: o site não tem edição nova")
         return
     mud = [k for k in sorted(set(novo) | set(local)) if novo.get(k) != local.get(k)]
-    shutil.copy(caminho, os.path.splitext(caminho)[0] + ".antes_nuvem.json")
+    if local:
+        shutil.copy(caminho, os.path.splitext(caminho)[0] + ".antes_nuvem.json")
     with open(caminho, "w", encoding="utf-8") as f:
         f.write(json.dumps(novo, ensure_ascii=False, indent=2) + "\n")
     ultimo = git(repo, "log", "-1", "--format=%an, %cr", "--", f"projetos/{nome}/projeto.json")
-    print(f"atualizado com a edição do site ({ultimo}); mudou: {', '.join(mud)}")
+    print(f"{caminho}: atualizado com a edição do site ({ultimo}); mudou: {', '.join(mud)}")
 
 
 def lista():
@@ -183,6 +211,8 @@ def publicar_site():
     for n in sorted(os.listdir(AQUI)):
         if n.endswith((".py", ".html", ".css")) or n == "VERSAO":
             shutil.copy(os.path.join(AQUI, n), destm)
+    if os.path.isdir(os.path.join(AQUI, "modelos")):
+        shutil.copytree(os.path.join(AQUI, "modelos"), os.path.join(destm, "modelos"))
     shutil.copy(os.path.join(RAIZ, "LEIA-ME.md"), repo)
     os.makedirs(os.path.join(repo, "exemplos"), exist_ok=True)
     shutil.copy(os.path.join(RAIZ, "exemplos", "roteiro_modelo.json"), os.path.join(repo, "exemplos"))
@@ -201,13 +231,14 @@ def main():
     ap.add_argument("projeto", nargs="?")
     ap.add_argument("--folga", type=float, default=1.5)
     ap.add_argument("--sem-midia", action="store_true")
+    ap.add_argument("--pasta", help="baixar <nome>: pasta local do projeto (padrão projetos/<nome>)")
     a = ap.parse_args()
     if a.acao in ("subir", "baixar") and not a.projeto:
         ap.error("faltou o projeto.json")
     if a.acao == "subir":
         subir(a.projeto, a.folga, a.sem_midia)
     elif a.acao == "baixar":
-        baixar(a.projeto)
+        baixar(a.projeto, a.pasta)
     elif a.acao == "lista":
         lista()
     else:

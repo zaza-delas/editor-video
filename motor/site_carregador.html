@@ -33,6 +33,13 @@
       <div class="erro" id="erro-projetos"></div>
       <div class="linha"><button id="bt-sair">Trocar token</button></div>
     </div>
+    <div class="cartao" id="bloco-novo" hidden>
+      <label for="novo-nome">Novo projeto</label>
+      <input type="text" id="novo-nome" placeholder="nome (ex.: chileno_v1)" autocomplete="off" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--linha);background:var(--painel2);color:var(--texto);font:inherit;font-size:15px">
+      <div class="linha"><input type="file" id="novo-video" accept="video/*"></div>
+      <div class="linha"><button class="principal" id="bt-novo">Criar</button><span class="fraco" id="novo-estado"></span></div>
+      <div class="erro" id="erro-novo"></div>
+    </div>
     <div class="cartao">
       <label>Ou abre um editor.html que veio no chat</label>
       <input type="file" id="arquivo" accept=".html,.json">
@@ -43,7 +50,9 @@
 <script>
 const NUVEM = { dono: 'zaza-delas', repo: 'editor-video-projetos', ramo: 'main' };
 const API = `https://api.github.com/repos/${NUVEM.dono}/${NUVEM.repo}`;
-const nuvem = { modo: null, nome: null, sha: null, shaMidias: null, salvando: false, timer: null, ultimoLido: null };
+const nuvem = { modo: null, nome: null, sha: null, shaMidias: null, salvando: false, timer: null, ultimoLido: null, enviando: 0 };
+const locais = {}; // arquivos que vieram deste computador nesta sessão (não baixa de volta do GitHub)
+const LIMITE_MB = 95; // o GitHub recusa arquivo acima de 100 MB
 const $$ = (id) => document.getElementById(id);
 const tokenSalvo = () => { try { return localStorage.getItem('kbeditor:token') || ''; } catch (e) { return ''; } };
 const b64txt = (b) => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\n/g, '')), (c) => c.charCodeAt(0)));
@@ -56,13 +65,29 @@ async function gh(caminho, opc = {}) {
     body: opc.body ? JSON.stringify(opc.body) : undefined,
   });
   if (!r.ok) { const e = new Error('GitHub ' + r.status); e.status = r.status; try { e.info = await r.json(); } catch (x) { } throw e; }
-  return opc.raw ? r.text() : r.json();
+  return opc.blob ? r.blob() : opc.raw ? r.text() : r.json();
 }
+function arquivoB64(f) { return new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = erro; r.readAsDataURL(f); }); }
+function enviarArquivo(caminho, conteudoB64, msg, progresso, sha) { // XHR pra ter o progresso do envio
+  return new Promise((ok, erro) => {
+    const x = new XMLHttpRequest(); x.open('PUT', API + caminho);
+    x.setRequestHeader('Authorization', 'Bearer ' + tokenSalvo()); x.setRequestHeader('Accept', 'application/vnd.github+json');
+    x.upload.onprogress = (e) => { if (e.lengthComputable && progresso) progresso(Math.round(e.loaded * 100 / e.total)); };
+    x.onload = () => (x.status < 300 ? ok(JSON.parse(x.responseText)) : erro(Object.assign(new Error('GitHub ' + x.status), { status: x.status })));
+    x.onerror = () => erro(new Error('sem rede'));
+    x.send(JSON.stringify({ message: msg, content: conteudoB64, branch: NUVEM.ramo, ...(sha ? { sha } : {}) }));
+  });
+}
+function duracaoMidia(url, tipo) {
+  return new Promise((ok) => { if (tipo === 'imagem') return ok(0); const e = document.createElement(tipo === 'audio' ? 'audio' : 'video'); e.preload = 'metadata'; e.onloadedmetadata = () => ok(e.duration || 0); e.onerror = () => ok(0); e.src = url; });
+}
+const tipoPorNome = (n) => (/\.(mp4|mov|webm|mkv|m4v)$/i.test(n) ? 'video' : /\.(mp3|wav|m4a|aac|ogg|opus|flac)$/i.test(n) ? 'audio' : /\.(png|jpe?g|webp|gif)$/i.test(n) ? 'imagem' : null);
+const slug = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
 const pasta = (nome) => '/contents/projetos/' + encodeURIComponent(nome);
 
 async function telaInicio() {
   const tk = tokenSalvo();
-  $$('bloco-token').hidden = !!tk; $$('bloco-projetos').hidden = !tk;
+  $$('bloco-token').hidden = !!tk; $$('bloco-projetos').hidden = !tk; $$('bloco-novo').hidden = !tk;
   if (!tk) return;
   try {
     let itens;
@@ -110,11 +135,23 @@ async function abrirNuvem(nome) {
   try {
     const lista = await gh(pasta(nome));
     const arq = Object.fromEntries(lista.map((x) => [x.name, x]));
-    if (!arq['projeto.json'] || !arq['midias.json']) throw new Error('projeto incompleto no repo');
-    const [proj, midias] = await Promise.all([gh(pasta(nome) + '/projeto.json'), gh(pasta(nome) + '/midias.json', { raw: true })]);
-    nuvem.modo = 'nuvem'; nuvem.nome = nome; nuvem.sha = proj.sha; nuvem.shaMidias = arq['midias.json'].sha;
+    if (!arq['projeto.json']) throw new Error('projeto sem projeto.json no repo');
+    const [proj, midiasTxt] = await Promise.all([gh(pasta(nome) + '/projeto.json'), arq['midias.json'] ? gh(pasta(nome) + '/midias.json', { raw: true }) : '{}']);
+    nuvem.modo = 'nuvem'; nuvem.nome = nome; nuvem.sha = proj.sha; nuvem.shaMidias = arq['midias.json'] ? arq['midias.json'].sha : null;
     nuvem.ultimoLido = b64txt(proj.content);
-    iniciarEditor({ projeto: JSON.parse(nuvem.ultimoLido), midias: JSON.parse(midias) });
+    const projeto = JSON.parse(nuvem.ultimoLido), midias = JSON.parse(midiasTxt);
+    // mídia que veio do computador do Zaza e o King Bot ainda não transformou em mídia leve
+    const noRepo = arq['midia'] ? (await gh(pasta(nome) + '/midia').catch(() => [])).map((x) => 'midia/' + x.name) : [];
+    for (const [n, cam] of Object.entries(projeto.midia || {})) {
+      const c = typeof cam === 'string' ? cam : cam && cam.arquivo, tipo = c && tipoPorNome(c);
+      if (midias[n] || !tipo || !(locais[nome + '/' + c] || noRepo.includes(c))) continue;
+      $$('lista-projetos').innerHTML = '<span class="fraco">Baixando ' + esc0(c) + '...</span>';
+      const url = locais[nome + '/' + c] || URL.createObjectURL(await gh(pasta(nome) + '/' + c.split('/').map(encodeURIComponent).join('/'), { raw: true, blob: true }));
+      const dur = await duracaoMidia(url, tipo);
+      midias[n] = { tipo, src: url, duracao: dur, local: true, ...(tipo === 'video' ? { mapa: [{ a: 0, b: dur, o: 0 }] } : {}) };
+    }
+    window.__SEM_RECUPERAR = true;
+    iniciarEditor({ projeto, midias });
   } catch (e) {
     $$('erro-projetos').textContent = 'Não abriu: ' + e.message; telaInicio();
   }
@@ -126,14 +163,67 @@ function iniciarEditor(dados) {
   s.textContent = $$('principal').textContent;
   $$('inicio').remove();
   document.body.appendChild(s);
-  if (nuvem.modo === 'nuvem') ligarNuvem(); else $('bt-baixar').textContent = 'Baixar projeto';
+  if (nuvem.modo === 'nuvem') { ligarNuvem(); window.kbEnviarMidia = enviarMidia; } else $('bt-baixar').textContent = 'Baixar projeto';
+  const bm = $('bt-menu'); bm.hidden = false;
+  bm.onclick = async () => { // volta pra lista de projetos (salva antes)
+    if (nuvem.modo === 'nuvem') { clearTimeout(nuvem.timer); while (nuvem.enviando) await new Promise((ok) => setTimeout(ok, 300)); await salvar(); if (sujo() && !confirm('Não consegui salvar no GitHub. Sair mesmo assim?')) return; }
+    else if (sujo() && !confirm('Sair sem baixar o projeto? A edição fica guardada neste navegador.')) return;
+    ultimoBaixado = JSON.stringify(P); location.href = location.pathname;
+  };
 }
+
+// ---------- mídia do computador vai pro repo ----------
+async function enviarMidia(f, caminho, nomeMidia) {
+  if (f.size > LIMITE_MB * 1e6) { aviso(`${f.name} tem ${Math.round(f.size / 1e6)} MB: o GitHub só aceita até ${LIMITE_MB}. Fica só nesta sessão; manda no chat.`); return; }
+  locais[nuvem.nome + '/' + caminho] = M[nomeMidia] && M[nomeMidia].src;
+  nuvem.enviando++;
+  try {
+    marcar('enviando ' + f.name + '...');
+    await enviarArquivo(pasta(nuvem.nome) + '/' + caminho.split('/').map(encodeURIComponent).join('/'), await arquivoB64(f), 'mídia do Zaza: ' + f.name, (p) => marcar(`enviando ${f.name} ${p}%`));
+    marcar('mídia enviada ✓');
+  } catch (e) { aviso('Não enviou ' + f.name + ' (' + e.message + ')'); marcar('mídia não enviada'); }
+  nuvem.enviando--;
+  clearTimeout(nuvem.timer); nuvem.timer = setTimeout(salvar, 500);
+}
+
+// ---------- projeto novo, direto do site ----------
+$$('bt-novo').onclick = async () => {
+  const nome = slug($$('novo-nome').value), f = $$('novo-video').files[0], E = (t) => { $$('erro-novo').textContent = t; };
+  E('');
+  if (!nome) return E('Põe um nome.');
+  if (!f) return E('Escolhe o vídeo.');
+  if (f.size > LIMITE_MB * 1e6) return E(`Esse vídeo tem ${Math.round(f.size / 1e6)} MB e o GitHub só aceita até ${LIMITE_MB} MB. Corta antes ou manda no chat.`);
+  const bt = $$('bt-novo'), st = (t) => { $$('novo-estado').textContent = t; };
+  bt.disabled = true;
+  try {
+    try { await gh(pasta(nome)); return E('Já existe um projeto com esse nome.'); } catch (e) { if (e.status !== 404) throw e; }
+    const ext = (f.name.match(/\.[^.]+$/) || ['.mp4'])[0].toLowerCase(), caminho = 'midia/bruto' + ext, url = URL.createObjectURL(f);
+    const dur = await duracaoMidia(url, 'video');
+    if (!dur) return E('Não consegui ler esse vídeo.');
+    st('enviando o vídeo 0%');
+    await enviarArquivo(pasta(nome) + '/' + caminho, await arquivoB64(f), 'projeto novo: ' + nome, (p) => st(`enviando o vídeo ${p}%`));
+    locais[nome + '/' + caminho] = url;
+    st('criando o projeto...');
+    const projeto = { nome, formato: { largura: 1080, altura: 1920, fps: 30, lufs: -14 }, midia: { bruto: caminho },
+      trechos: [{ midia: 'bruto', de: 0, ate: Math.round(dur * 1000) / 1000 }], legendas: [] };
+    await gh(pasta(nome) + '/projeto.json', { method: 'PUT', body: { message: 'projeto novo: ' + nome, content: txtb64(JSON.stringify(projeto, null, 2) + '\n'), branch: NUVEM.ramo } });
+    let ind = [], shaInd;
+    try { const r = await gh('/contents/projetos/indice.json'); shaInd = r.sha; ind = JSON.parse(b64txt(r.content)); } catch (e) { if (e.status !== 404) throw e; }
+    const agora = new Date(), q2 = (n) => String(n).padStart(2, '0');
+    ind = [{ nome, quando: `${q2(agora.getDate())}/${q2(agora.getMonth() + 1)} ${q2(agora.getHours())}:${q2(agora.getMinutes())}` }, ...ind.filter((x) => x.nome !== nome)];
+    await gh('/contents/projetos/indice.json', { method: 'PUT', body: { message: 'índice: ' + nome, content: txtb64(JSON.stringify(ind, null, 1)), branch: NUVEM.ramo, ...(shaInd ? { sha: shaInd } : {}) } });
+    history.replaceState(null, '', '?p=' + encodeURIComponent(nome));
+    abrirNuvem(nome);
+  } catch (e) { E('Não criou: ' + e.message); st(''); }
+  bt.disabled = false;
+};
 
 // ---------- salvar no repo e puxar o que o King Bot mudar ----------
 function normal(p) { p.legendas = p.legendas || []; p.sfx = p.sfx || []; p.estilo = p.estilo || {}; p.sobre = p.sobre || []; return p; }
 function marcar(txt) { const e = $$('estado-nuvem'); if (e) e.textContent = txt; }
 async function salvar(forcar) {
   if (nuvem.salvando) return;
+  if (nuvem.enviando && !forcar) { clearTimeout(nuvem.timer); nuvem.timer = setTimeout(salvar, 1500); return; }
   fecharPendente();
   const txt = JSON.stringify(P, null, 2) + '\n';
   if (!forcar && JSON.stringify(P) === ultimoBaixado) return marcar('salvo ✓');
@@ -154,11 +244,11 @@ async function salvar(forcar) {
   nuvem.salvando = false;
 }
 async function puxar() {
-  if (nuvem.salvando || document.hidden) return;
+  if (nuvem.salvando || nuvem.enviando || document.hidden) return;
   try {
     const lista = await gh(pasta(nuvem.nome));
     const pj = lista.find((x) => x.name === 'projeto.json'), md = lista.find((x) => x.name === 'midias.json');
-    if (md && md.sha !== nuvem.shaMidias) {
+    if (md && md.sha !== nuvem.shaMidias && !nuvem.enviando) {
       if (!sujo()) { aviso('O King Bot mandou mídia nova: recarregando'); setTimeout(() => location.reload(), 900); }
       else marcar('mídia nova no GitHub: salva e recarrega');
       return;
